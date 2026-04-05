@@ -624,7 +624,8 @@ function gsr(fnName, arg) {
       body: JSON.stringify({
         fn: fnName,
         arg: arg !== undefined ? arg : null,
-        token: _googleAccessToken
+        token: _googleAccessToken,
+        email: currentUser || localStorage.getItem('momentum_user_email') || ''
       })
     })
     .then(function(r) {
