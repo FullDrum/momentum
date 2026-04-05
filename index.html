@@ -551,8 +551,8 @@ async function fetchAll() {
 }
 
 // ── PWA Config — fill these in ───────────────────────────────────────────────
-var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbweX3x7fglJ-R78DROUj4DPfqWfw9SosOqPX4htozEAcIPEvS3o5U52cL8WGGAsSzaH/exec';  // from Code.gs deployment
-var GOOGLE_CLIENT_ID = '751338704263-1iso4ep0be9brhic463uc4ogkst6en2g.apps.googleusercontent.com'; // from Google Cloud Console
+var APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL';  // from Code.gs deployment
+var GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // from Google Cloud Console
 
 // ── Auth state ────────────────────────────────────────────────────────────────
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
@@ -614,10 +614,12 @@ function gsr(fnName, arg) {
       reject(new Error('Not authenticated'));
       return;
     }
+    // Apps Script requires text/plain to avoid CORS preflight
+    // Also needs redirect:follow because Apps Script redirects to the actual endpoint
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      // Must use text/plain to avoid CORS preflight (Apps Script limitation)
-      headers: { 'Content-Type': 'text/plain' },
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         fn: fnName,
         arg: arg !== undefined ? arg : null,
@@ -626,9 +628,15 @@ function gsr(fnName, arg) {
     })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+      return r.text(); // get as text first to handle non-JSON errors
     })
-    .then(function(data) {
+    .then(function(text) {
+      var data;
+      try { data = JSON.parse(text); } catch(e) {
+        console.error('Non-JSON response:', text.slice(0, 200));
+        throw new Error('Server returned non-JSON response');
+      }
+      console.log('gsr response:', fnName, JSON.stringify(data).slice(0,200));
       if (data && data.error === 'Unauthorized') {
         showSignIn();
         var errEl = document.getElementById('signinError');
@@ -639,7 +647,10 @@ function gsr(fnName, arg) {
       if (data && data.error) { reject(new Error(data.error)); return; }
       resolve(data);
     })
-    .catch(reject);
+    .catch(function(err) {
+      console.error('gsr error:', fnName, err.message);
+      reject(err);
+    });
   });
 }
 
@@ -3461,6 +3472,7 @@ function switchUser() {
 
 function bootApp() {
   gsr('whoAmI').then(function(r) {
+    alert('Server says: ' + JSON.stringify(r));
     if (r && r.email) {
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
@@ -3473,8 +3485,17 @@ function bootApp() {
       }, 30000);
     }
   }).catch(function(e) {
-    console.error('Boot error:', e);
-    showSignIn();
+    console.error('Boot error:', e.message);
+    // Only show sign-in if it's an auth error, not a network error
+    if (e.message === 'Not authenticated' || e.message === 'Unauthorized') {
+      showSignIn();
+    } else {
+      // Network/server error — show a message but don't kick to sign-in
+      document.getElementById('treeEl').innerHTML =
+        '<div class="empty" style="padding:32px;">Connection error: ' + e.message +
+        '<br><br><button onclick="bootApp()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:14px;">Retry</button></div>';
+      showApp();
+    }
   });
 }
 
