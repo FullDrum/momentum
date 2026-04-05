@@ -3517,6 +3517,9 @@ if ('serviceWorker' in navigator) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  checkMobile();
+  setTimeout(checkMobile, 300);
+  setTimeout(checkMobile, 1000);
   document.querySelectorAll('.tab').forEach(function(t) {
     t.onclick = function() {
       pushNav();
