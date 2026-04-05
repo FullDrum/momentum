@@ -3522,6 +3522,19 @@ document.addEventListener('DOMContentLoaded', function() {
       render();
     };
   });
+
+  // Wire mobile nav buttons
+  document.querySelectorAll('.mobile-nav-btn[data-tab]').forEach(function(btn) {
+    btn.onclick = function() {
+      pushNav();
+      activeTab = btn.dataset.tab;
+      if (activeTab !== 'tree') zoomedId = null;
+      document.querySelectorAll('.mobile-nav-btn').forEach(function(x) { x.classList.remove('active'); });
+      btn.classList.add('active');
+      updateZoomCrumb();
+      render();
+    };
+  });
   document.getElementById('collapseBtn').onclick = collapseAll;
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && opQueueDepth === 0 &&
