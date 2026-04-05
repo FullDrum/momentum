@@ -3507,6 +3507,295 @@ function checkMobile() {
 }
 
 // Run after DOM is ready
+function attachMobileSwipe() {
+  if (!isMobile) return;
+  var treeEl = document.getElementById('treeEl');
+  if (!treeEl || treeEl._swipeInited) return;
+  treeEl._swipeInited = true;
+
+  // ── Constants ──────────────────────────────────────────────────────────────
+  var LONG_PRESS_MS  = 650;   // hold duration to trigger select or drag (longer than browser's ~500ms native menu)
+  var MOVE_CANCEL_PX = 20;    // movement that cancels a long press
+  var TAP_MAX_PX = 35;         // max movement to still count as a tap
+  var SWIPE_MIN_PX   = 60;    // horizontal swipe threshold for action sheet
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  // Gesture phases:
+  //   'idle'           — no touch active
+  //   'pressing'       — finger down, waiting (long press not yet fired)
+  //   'range-select'   — long press fired in select mode, finger dragging to range-select
+  //   'drag'           — long press fired in selection mode (2nd press), dragging items
+  //   'swipe'          — horizontal left swipe for action sheet
+  var phase = 'idle';
+  var startX = 0, startY = 0;
+  var activeRow = null;
+  var longTimer = null;
+  var dragGhostEl = null;
+  var dropRow = null, dropMode = null;
+  var dragIds = []; // snapshot of selected IDs at drag start
+
+  function vibrate() { try { navigator.vibrate && navigator.vibrate(45); } catch(e){} }
+
+
+  function cancelTimer() {
+    if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+  }
+
+  // ── Ghost for drag ─────────────────────────────────────────────────────────
+  function createGhost(x, y) {
+    dragGhostEl = document.createElement('div');
+    var ids = dragIds.length ? dragIds : [...selectedIds];
+    var names = ids.map(function(sid) {
+      var n = nodes.find(function(x){ return x.id === sid; });
+      return n ? (n.name || '…') : sid;
+    }).join(', ');
+    dragGhostEl.textContent = (ids.length > 1 ? ids.length + ' items' : names.slice(0, 50));
+    dragGhostEl.style.cssText = 'position:fixed;pointer-events:none;background:var(--bg);border:2.5px solid var(--accent);border-radius:10px;padding:10px 18px;font-size:22px;color:var(--text);opacity:0.93;z-index:9999;white-space:nowrap;box-shadow:0 6px 24px rgba(0,0,0,0.25);max-width:75vw;overflow:hidden;text-overflow:ellipsis;';
+    dragGhostEl.style.left = (x + 20) + 'px';
+    dragGhostEl.style.top  = (y - 30) + 'px';
+    document.body.appendChild(dragGhostEl);
+    var idsToMark = dragIds.length ? dragIds : [...selectedIds];
+    idsToMark.forEach(function(sid) {
+      var r = treeEl.querySelector('[data-id="' + sid + '"]');
+      if (r) r.classList.add('dragging');
+    });
+  }
+
+  function destroyGhost() {
+    if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; }
+    treeEl.querySelectorAll('.dragging').forEach(function(r) { r.classList.remove('dragging'); });
+    clearDropStyles();
+    dragIds = [];
+  }
+
+  function updateDrop(cx, cy) {
+    if (dragGhostEl) {
+      dragGhostEl.style.left = (cx + 20) + 'px';
+      dragGhostEl.style.top  = (cy - 30) + 'px';
+    }
+    // Auto-scroll
+    var tr = treeEl.getBoundingClientRect();
+    var ZONE = 90;
+    if (cy > tr.bottom - ZONE) treeEl.scrollTop += Math.ceil(14 * Math.min(1, (cy - (tr.bottom - ZONE)) / ZONE));
+    else if (cy < tr.top + ZONE) treeEl.scrollTop -= Math.ceil(14 * Math.min(1, ((tr.top + ZONE) - cy) / ZONE));
+    // Drop target
+    if (dragGhostEl) dragGhostEl.style.display = 'none';
+    var el = document.elementFromPoint(cx, cy);
+    if (dragGhostEl) dragGhostEl.style.display = '';
+    var tRow = el ? el.closest('.node-row') : null;
+    clearDropStyles();
+    if (tRow && !selectedIds.has(tRow.dataset.id)) {
+      dropRow = tRow;
+      var rect = tRow.getBoundingClientRect();
+      var relY = cy - rect.top;
+      dropMode = relY < rect.height * 0.28 ? 'above' : relY > rect.height * 0.72 ? 'below' : 'child';
+      tRow.classList.add('drop-' + dropMode);
+    } else {
+      dropRow = null; dropMode = null;
+    }
+  }
+
+  // ── TOUCHSTART ─────────────────────────────────────────────────────────────
+  treeEl.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) { cancelTimer(); phase = 'idle'; return; }
+    var t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    // Don't intercept actual buttons and controls
+    if (e.target.closest('button,.toggle,.mobile-toggle,[data-showmore],.kb-bar,input[type=checkbox]')) return;
+    activeRow = e.target.closest('.node-row');
+    if (!activeRow) return;
+
+    phase = 'pressing';
+
+    longTimer = setTimeout(function() {
+      longTimer = null;
+      vibrate();
+      var nodeId = activeRow ? activeRow.dataset.id : null;
+      if (!nodeId) return;
+      // If a textarea is open, close it first (discard focus, keep content)
+      if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+        suppressBlur = true;
+        document.activeElement.blur();
+        setTimeout(function() { suppressBlur = false; }, 100);
+      }
+      if (selectionMode) {
+        // ── Second long press while in selection mode → START DRAG ──────────
+        // Ensure the pressed item is included in the drag
+        if (!selectedIds.has(nodeId)) {
+          selectedIds.add(nodeId);
+        }
+        // Snapshot all selected IDs so taps during drag don't change the set
+        dragIds = [...selectedIds];
+        phase = 'drag';
+        createGhost(startX, startY);
+      } else {
+        // ── First long press → enter selection mode ─────────────────────────
+        selectedIds.clear();
+        selectedIds.add(nodeId);
+        updateSelectionStyles();
+        selectionMode = true;
+        phase = 'range-select';
+      }
+    }, LONG_PRESS_MS);
+
+  }, { passive: true });
+
+  // ── TOUCHMOVE ──────────────────────────────────────────────────────────────
+  treeEl.addEventListener('touchmove', function(e) {
+    if (e.touches.length !== 1) return;
+    var t = e.touches[0];
+    var dx = t.clientX - startX;
+    var dy = t.clientY - startY;
+    var dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (phase === 'drag') {
+      e.preventDefault();
+      updateDrop(t.clientX, t.clientY);
+      return;
+    }
+
+    if (phase === 'range-select') {
+      e.preventDefault();
+      // Extend selection to all rows between anchor and current finger
+      var el = document.elementFromPoint(t.clientX, t.clientY);
+      var tRow = el ? el.closest('.node-row') : null;
+      if (tRow && activeRow) {
+        var rows = [...treeEl.querySelectorAll('.node-row')];
+        var si = rows.indexOf(activeRow), ei = rows.indexOf(tRow);
+        if (si >= 0 && ei >= 0) {
+          var lo = Math.min(si, ei), hi = Math.max(si, ei);
+          selectedIds.clear();
+          for (var i = lo; i <= hi; i++) {
+            if (rows[i].dataset.id) selectedIds.add(rows[i].dataset.id);
+          }
+          updateSelectionStyles();
+        }
+      }
+      return;
+    }
+
+    if (phase === 'pressing') {
+      // Only cancel long press on horizontal movement (swipe gesture)
+      // Vertical movement = user might be scrolling, still allow long press to fire
+      var isHorizontalSwipe = Math.abs(dx) > MOVE_CANCEL_PX && Math.abs(dx) > Math.abs(dy) * 1.5;
+      var isLargeMove = dist > 40; // very large movement = definitely not a hold
+      if (isHorizontalSwipe || isLargeMove) {
+        cancelTimer();
+        if (!selectionMode && isHorizontalSwipe && dx < 0) {
+          phase = 'swipe';
+        } else {
+          phase = 'idle';
+        }
+      }
+    }
+
+    if (phase === 'swipe' && activeRow) {
+      if (dx < 0 && dx > -150) {
+        activeRow.style.transform = 'translateX(' + dx + 'px)';
+      }
+    }
+
+  }, { passive: false });
+
+  // ── TOUCHEND ───────────────────────────────────────────────────────────────
+  function cleanupDrag() {
+    destroyGhost();
+    dragIds = [];
+    dropRow = null; dropMode = null;
+  }
+
+  treeEl.addEventListener('touchend', function(e) {
+    cancelTimer();
+    var t = e.changedTouches[0];
+    var dx = t ? t.clientX - startX : 0;
+    var dy = t ? t.clientY - startY : 0;
+    var dist = Math.sqrt(dx*dx + dy*dy);
+    var endPhase = phase;
+    phase = 'idle';
+    // Prevent click from firing after selection tap
+    if (selectionMode && endPhase === 'pressing' && dist < TAP_MAX_PX) {
+      e.preventDefault();
+    }
+
+    if (endPhase === 'drag') {
+      var idsToMove = dragIds.length ? dragIds : [...selectedIds];
+      var dropTarget = dropRow, dropModeSnap = dropMode;
+      cleanupDrag();
+      if (dropTarget && dropModeSnap) {
+        performDrop(idsToMove, dropTarget.dataset.id, dropModeSnap);
+      }
+      return;
+    }
+
+    if (endPhase === 'swipe' && activeRow) {
+      activeRow.style.transform = '';
+      activeRow.style.transition = 'transform 0.22s';
+      setTimeout(function() { if (activeRow) activeRow.style.transition = ''; }, 250);
+      if (dx < -SWIPE_MIN_PX) showMobileActionSheet(activeRow.dataset.id);
+      activeRow = null;
+      return;
+    }
+
+    if (endPhase === 'range-select') {
+      // Long press just fired and finger lifted — stay in selection mode
+      activeRow = null;
+      return;
+    }
+
+    if ((endPhase === 'pressing') && dist < TAP_MAX_PX && activeRow) {
+      if (selectionMode) {
+        // In selection mode: tap toggles this node in/out of selection
+        var nodeId = activeRow.dataset.id;
+        if (selectedIds.has(nodeId)) selectedIds.delete(nodeId);
+        else selectedIds.add(nodeId);
+        updateSelectionStyles();
+        if (selectedIds.size === 0) selectionMode = false;
+        // Prevent the tap from also triggering click/focus on the row
+        e.preventDefault && e.preventDefault();
+      }
+      // If not in selection mode, normal tap — let click bubble
+    }
+
+    activeRow = null;
+  }, { passive: false });
+
+  // touchcancel — system interrupted (notification, call, etc) — always clean up
+  treeEl.addEventListener('touchcancel', function() {
+    cancelTimer();
+    cleanupDrag();
+    if (activeRow) { activeRow.style.transform = ''; }
+    phase = 'idle';
+    activeRow = null;
+  });
+
+  // Also clean up if multiple touches start
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1 && phase === 'drag') {
+      cancelTimer();
+      cleanupDrag();
+      phase = 'idle';
+      activeRow = null;
+    }
+  }, { passive: true });
+
+  // Tap outside tree clears selection
+  document.addEventListener('touchstart', function(e) {
+    if (!selectionMode) return;
+    if (!e.target.closest('#treeEl, #selectBar, .mobile-nav, #kbBar')) {
+      clearSelection();
+      selectionMode = false;
+    }
+  }, { passive: true });
+}
+
+// Re-attach swipe after each render
+var _origAttachEvents = attachEvents;
+attachEvents = function() {
+  _origAttachEvents();
+  attachMobileSwipe();
+};
+
+
 function switchUser() {
   localStorage.removeItem('momentum_user_email');
   localStorage.removeItem('momentum_access_token');
