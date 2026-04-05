@@ -44,6 +44,8 @@
   .toolbar button { font-size: 11px; padding: 4px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; background: var(--bg); color: var(--text); white-space: nowrap; }
   .toolbar button:hover { background: var(--bg2); }
   .user-pill { font-size: 11px; color: var(--text2); background: var(--bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 2px 9px; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  .desktop-only { display: inline-block; }
+  .is-mobile .desktop-only { display: none !important; }
   .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; transition: background 0.3s; }
   .sync-dot.syncing { background: #f0a500; }
   .sync-dot.ok { background: #3aaa6e; }
@@ -350,7 +352,7 @@
     <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)">↪</button>
     <button id="collapseBtn">Collapse all</button>
     <button id="hideDoneBtn" onclick="toggleHideDone()" title="Toggle visibility of completed tasks">Hide done</button>
-    <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)">⌕ Search</button>
+    <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)" class="desktop-only">⌕ Search</button>
     <button onclick="claimOwnership()" id="claimBtn" title="Claim ownership of all unowned nodes" style="display:none">⚑ Claim</button>
   </div>
   <div class="search-bar hidden" id="searchBar">
