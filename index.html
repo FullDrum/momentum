@@ -568,11 +568,16 @@ function signInWithGoogle() {
     scope: 'email profile',
     callback: function(response) {
       if (response.error) {
-        console.error('Sign-in error:', response.error);
+        alert('Sign-in error: ' + response.error);
         return;
       }
+      alert('Got token response:\n' + 
+        'access_token: ' + (response.access_token ? response.access_token.slice(0,30)+'...' : 'MISSING') + '\n' +
+        'token_type: ' + response.token_type + '\n' +
+        'expires_in: ' + response.expires_in + '\n' +
+        'scope: ' + response.scope
+      );
       _googleAccessToken = response.access_token;
-      // Token expires in response.expires_in seconds
       _tokenExpiry = Date.now() + (response.expires_in * 1000);
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
