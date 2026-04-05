@@ -3503,6 +3503,13 @@ function bootApp() {
   });
 }
 
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function(e) {
+    console.log('SW registration failed:', e);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.tab').forEach(function(t) {
     t.onclick = function() {
