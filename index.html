@@ -551,8 +551,8 @@ async function fetchAll() {
 }
 
 // ── PWA Config — fill these in ───────────────────────────────────────────────
-var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbweX3x7fglJ-R78DROUj4DPfqWfw9SosOqPX4htozEAcIPEvS3o5U52cL8WGGAsSzaH/exec';  // from Code.gs deployment
-var GOOGLE_CLIENT_ID = '751338704263-1iso4ep0be9brhic463uc4ogkst6en2g.apps.googleusercontent.com'; // from Google Cloud Console
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtqfMnPdg8aDB_9OS_tZeNoTQ7Yr_glVTAhZgGqeJyUQwUOxlVJSyCqwP_FkkhKrzL/exec';
+var GOOGLE_CLIENT_ID = '751338704263-1iso4ep0be9brhic463uc4ogkst6en2g.apps.googleusercontent.com';
 
 // ── Auth state ────────────────────────────────────────────────────────────────
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
@@ -571,13 +571,7 @@ function signInWithGoogle() {
         alert('Sign-in error: ' + response.error);
         return;
       }
-      alert('Got token response:\n' + 
-        'access_token: ' + (response.access_token ? response.access_token.slice(0,30)+'...' : 'MISSING') + '\n' +
-        'token_type: ' + response.token_type + '\n' +
-        'expires_in: ' + response.expires_in + '\n' +
-        'scope: ' + response.scope
-      );
-      _googleAccessToken = response.access_token;
+        _googleAccessToken = response.access_token;
       _tokenExpiry = Date.now() + (response.expires_in * 1000);
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
@@ -641,7 +635,6 @@ function gsr(fnName, arg) {
         console.error('Non-JSON response:', text.slice(0, 200));
         throw new Error('Server returned non-JSON response');
       }
-      console.log('gsr response:', fnName, JSON.stringify(data).slice(0,200));
       if (data && data.error === 'Unauthorized') {
         showSignIn();
         var errEl = document.getElementById('signinError');
@@ -3477,7 +3470,6 @@ function switchUser() {
 
 function bootApp() {
   gsr('whoAmI').then(function(r) {
-    alert('Server says: ' + JSON.stringify(r));
     if (r && r.email) {
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
