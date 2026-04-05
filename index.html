@@ -159,6 +159,8 @@
   .is-mobile .toggle { display: none; }
   .is-mobile .mobile-toggle { display: flex; align-items: center; }
   .is-mobile .zoom-dot { display: none; }
+  .mobile-zoom-btn { display: none; font-size: 18px; color: var(--text3); padding: 4px 8px; cursor: pointer; user-select: none; flex-shrink: 0; align-self: center; }
+  .is-mobile .mobile-zoom-btn { display: flex; align-items: center; }
   .node-row { position: relative; }
   .node-row.context-only .drag-handle,
   .node-row.context-only .sel-btn,
@@ -926,7 +928,8 @@ function rowHTML(n, depth, flat = false) {
   var selState = selectedIds.has(n.id) ? '●' : '○';
   var dragHandle = flat ? '' : '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
   var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
-  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileToggle}</div>`;
+  var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
+  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileZoom}${mobileToggle}</div>`;
 }
 
 function attachEvents() {
@@ -3262,14 +3265,15 @@ function redo() {
     ms.setAttribute('media', 'not all'); // disabled by default
     document.head.appendChild(ms);
   }
-  ms.textContent = '.node-display{font-size:22px!important;padding:12px 4px!important;line-height:1.5!important}' +
-    '.node-display.is-section{font-size:24px!important;font-weight:700!important}' +
-    '.node-input{font-size:22px!important;padding:12px 4px!important;line-height:1.5!important}' +
-    '.node-row{min-height:56px!important;align-items:center!important}' +
-    '.node-check{width:28px!important;height:28px!important;margin-top:0!important;margin-right:10px!important;flex-shrink:0!important;align-self:center!important}' +
-    '.mobile-toggle{display:flex!important;align-items:center!important;font-size:20px!important;padding:8px 12px!important;color:var(--text3)!important;align-self:center!important}' +
-    '.today-badge,.assignee-badge{font-size:16px!important;padding:4px 10px!important;align-self:center!important}' +
-    '.section-icon{width:36px!important;height:36px!important;margin-right:8px!important;align-self:center!important}' + '.section-icon svg{width:36px!important;height:36px!important}' + '.mobile-nav{display:block!important;height:130px!important}' +
+  ms.textContent = '.node-display{font-size:17px!important;padding:9px 4px!important;line-height:1.6!important}' +
+    '.node-display.is-section{font-size:18px!important;font-weight:600!important}' +
+    '.node-input{font-size:17px!important;padding:9px 4px!important;line-height:1.6!important}' +
+    '.node-row{min-height:44px!important;align-items:center!important}' +
+    '.node-check{width:22px!important;height:22px!important;margin-top:0!important;margin-right:10px!important;flex-shrink:0!important;align-self:center!important}' +
+    '.mobile-toggle{display:flex!important;align-items:center!important;font-size:16px!important;padding:6px 10px!important;color:var(--text3)!important;align-self:center!important}' +
+    '.mobile-zoom-btn{display:flex!important;align-items:center!important;font-size:16px!important;padding:6px 8px!important;color:var(--text3)!important;align-self:center!important}' +
+    '.today-badge,.assignee-badge{font-size:13px!important;padding:3px 8px!important;align-self:center!important}' +
+    '.section-icon{width:26px!important;height:26px!important;margin-right:8px!important;align-self:center!important}' + '.section-icon svg{width:26px!important;height:26px!important}' + '.mobile-nav{display:block!important;height:130px!important}' +
     '.mobile-nav-inner{display:flex!important;height:130px!important}' +
     '.mobile-nav-btn{font-size:22px!important;flex:1!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px!important}' +
     '.mobile-nav-btn svg{width:52px!important;height:52px!important}' +
@@ -3418,29 +3422,38 @@ function applyMobileStyles() {
         el.style.minHeight = '80px';
       });
       treeEl.querySelectorAll('.node-row').forEach(function(el) {
-        el.style.alignItems = 'center'; el.style.minHeight = '56px';
+        el.style.alignItems = 'center'; el.style.minHeight = '44px';
       });
       treeEl.querySelectorAll('.node-display').forEach(function(el) {
-        el.style.fontSize = el.classList.contains('is-section') ? '24px' : '22px';
-        el.style.padding = '12px 4px'; el.style.alignSelf = 'center';
+        el.style.fontSize = el.classList.contains('is-section') ? '18px' : '17px';
+        el.style.padding = '9px 4px'; el.style.lineHeight = '1.6'; el.style.alignSelf = 'center';
+      });
+      treeEl.querySelectorAll('.node-input').forEach(function(el) {
+        el.style.fontSize = el.classList.contains('is-section') ? '18px' : '17px';
+        el.style.padding = '9px 4px'; el.style.lineHeight = '1.6';
       });
       treeEl.querySelectorAll('.node-check').forEach(function(el) {
-        el.style.width = '28px'; el.style.height = '28px';
+        el.style.width = '22px'; el.style.height = '22px';
         el.style.marginTop = '0'; el.style.marginRight = '10px';
         el.style.flexShrink = '0'; el.style.alignSelf = 'center';
       });
       treeEl.querySelectorAll('.mobile-toggle').forEach(function(el) {
         el.style.display = 'flex'; el.style.alignItems = 'center';
-        el.style.fontSize = '20px'; el.style.padding = '8px 12px';
+        el.style.fontSize = '16px'; el.style.padding = '6px 10px';
+        el.style.alignSelf = 'center';
+      });
+      treeEl.querySelectorAll('.mobile-zoom-btn').forEach(function(el) {
+        el.style.display = 'flex'; el.style.alignItems = 'center';
+        el.style.fontSize = '16px'; el.style.padding = '6px 8px';
         el.style.alignSelf = 'center';
       });
       treeEl.querySelectorAll('.section-icon').forEach(function(el) {
-        el.style.marginTop = '0'; el.style.width = '36px'; el.style.height = '36px';
+        el.style.marginTop = '0'; el.style.width = '26px'; el.style.height = '26px';
         el.style.marginRight = '8px'; el.style.alignSelf = 'center';
-        var svg = el.querySelector('svg'); if (svg) { svg.style.width = '36px'; svg.style.height = '36px'; }
+        var svg = el.querySelector('svg'); if (svg) { svg.style.width = '26px'; svg.style.height = '26px'; }
       });
       treeEl.querySelectorAll('.today-badge, .assignee-badge').forEach(function(el) {
-        el.style.fontSize = '16px'; el.style.padding = '4px 10px';
+        el.style.fontSize = '13px'; el.style.padding = '3px 8px';
         el.style.marginTop = '0'; el.style.alignSelf = 'center';
       });
     }
