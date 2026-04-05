@@ -1413,6 +1413,25 @@ function addRoot() {
   nodes.push(n); focusId = n.id; scheduleSave(n); render();
 }
 
+function mobileAddItem() {
+  // Add a new task at the top of today view
+  pushUndo();
+  var nn = {
+    id: newId(), name: '', parentId: null,
+    isSection: false, done: false,
+    date: localDateTime(), owner: currentUser,
+    order: Date.now()
+  };
+  nodes.unshift(nn);
+  // Switch to today tab
+  activeTab = 'today';
+  document.querySelectorAll('.mobile-nav-btn').forEach(function(x) { x.classList.remove('active'); });
+  var todayBtn = document.getElementById('mnav-today');
+  if (todayBtn) todayBtn.classList.add('active');
+  focusId = nn.id;
+  render();
+}
+
 function modal(html, onOk) {
   var bg = document.createElement('div'); bg.className = 'modal-bg';
   bg.innerHTML = `<div class="modal">${html}<div class="modal-btns"><button class="cancel-btn">Cancel</button><button class="ok-btn primary">Save</button></div></div>`;
@@ -3276,7 +3295,7 @@ function redo() {
     '.section-icon{width:26px!important;height:26px!important;margin-right:8px!important;align-self:center!important}' + '.section-icon svg{width:26px!important;height:26px!important}' + '.mobile-nav{display:block!important;height:130px!important}' +
     '.mobile-nav-inner{display:flex!important;height:130px!important}' +
     '.mobile-nav-btn{font-size:22px!important;flex:1!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px!important}' +
-    '.mobile-nav-btn svg{width:52px!important;height:52px!important}' +
+    '.mobile-nav-btn svg{width:24px!important;height:24px!important}' +
     '.tabs{display:none!important}' +
     '.drag-handle{display:none!important}' +
     '.sel-btn{display:none!important}' +
@@ -3363,43 +3382,48 @@ function applyMobileStyles() {
     if (body) { body.style.padding = '0'; body.style.background = 'var(--bg)'; body.style.alignItems = 'stretch'; }
     if (app) { app.style.maxWidth = '100%'; app.style.height = '100dvh'; app.style.borderRadius = '0'; app.style.border = 'none'; app.style.boxShadow = 'none'; app.style.margin = '0'; }
     // Toolbar
-    if (toolbar) { toolbar.style.height = '70px'; toolbar.style.padding = '0 12px'; toolbar.style.fontSize = '22px'; }
+    if (toolbar) { toolbar.style.height = '48px'; toolbar.style.padding = '0 10px'; toolbar.style.fontSize = '14px'; }
     if (hintBar) hintBar.style.display = 'none';
     if (collapseBtn) collapseBtn.style.display = 'none';
     // Make toolbar buttons and pills bigger on mobile
     document.querySelectorAll('.toolbar button').forEach(function(b) {
-      b.style.fontSize = '22px'; b.style.padding = '8px 16px';
+      b.style.fontSize = '14px'; b.style.padding = '5px 12px';
     });
     var searchBtn = document.getElementById('searchBtn');
     if (searchBtn) searchBtn.style.display = 'none';
     // Make undo/redo prominent in mobile toolbar
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
-    if (undoBtn) { undoBtn.style.fontSize = '26px'; undoBtn.style.padding = '6px 14px'; }
-    if (redoBtn) { redoBtn.style.fontSize = '26px'; redoBtn.style.padding = '6px 14px'; }
+    if (undoBtn) { undoBtn.style.fontSize = '18px'; undoBtn.style.padding = '5px 10px'; }
+    if (redoBtn) { redoBtn.style.fontSize = '18px'; redoBtn.style.padding = '5px 10px'; }
     var pill = document.getElementById('userPill');
-    if (pill) { pill.style.fontSize = '20px'; pill.style.padding = '6px 14px'; pill.style.maxWidth = '180px'; }
+    if (pill) {
+      // Show as avatar circle with first letter
+      var letter = (currentUser || '?')[0].toUpperCase();
+      pill.textContent = letter;
+      pill.style.cssText = 'width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0;border:none;';
+    }
     var syncDot = document.getElementById('syncDot');
     if (syncDot) { syncDot.style.width = '14px'; syncDot.style.height = '14px'; }
     // Hide top tabs, show bottom nav
     if (tabs) tabs.style.display = 'none';
-    if (nav) { nav.style.display = 'block'; nav.style.height = '130px'; nav.style.flexShrink = '0'; nav.style.width = '100%'; nav.style.borderTop = '1px solid var(--border2)'; nav.style.background = 'var(--bg)'; }
+    if (nav) { nav.style.display = 'block'; nav.style.height = '60px'; nav.style.flexShrink = '0'; nav.style.width = '100%'; nav.style.borderTop = '1px solid var(--border2)'; nav.style.background = 'var(--bg)'; }
     // Nav inner
     var navInner = nav ? nav.querySelector('.mobile-nav-inner') : null;
-    if (navInner) { navInner.style.display = 'flex'; navInner.style.height = '130px'; navInner.style.width = '100%'; }
+    if (navInner) { navInner.style.display = 'flex'; navInner.style.height = '60px'; navInner.style.width = '100%'; }
     // Nav buttons
     if (nav) nav.querySelectorAll('.mobile-nav-btn').forEach(function(btn) {
       btn.style.flex = '1'; btn.style.display = 'flex'; btn.style.flexDirection = 'column';
       btn.style.alignItems = 'center'; btn.style.justifyContent = 'center';
-      btn.style.gap = '8px'; btn.style.fontSize = '22px'; btn.style.fontWeight = '500';
+      btn.style.gap = '4px'; btn.style.fontSize = '11px'; btn.style.fontWeight = '500';
       btn.style.border = 'none'; btn.style.background = 'none'; btn.style.padding = '8px 4px';
     });
     // Nav SVGs
     if (nav) nav.querySelectorAll('.mobile-nav-btn svg').forEach(function(svg) {
-      svg.style.width = '52px'; svg.style.height = '52px';
+      svg.style.width = '24px'; svg.style.height = '24px';
     });
     // FAB
-    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '146px'; fab.style.right = '20px'; fab.style.width = '100px'; fab.style.height = '100px'; fab.style.fontSize = '52px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
+    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '68px'; fab.style.right = '16px'; fab.style.width = '52px'; fab.style.height = '52px'; fab.style.fontSize = '26px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
     // Tree
     if (treeEl) treeEl.style.paddingBottom = '16px';
     // Activate mobile stylesheet
