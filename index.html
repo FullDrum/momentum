@@ -559,7 +559,9 @@ var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
 var _tokenExpiry = parseInt(localStorage.getItem('momentum_token_expiry') || '0');
 
 function isTokenValid() {
-  return _googleAccessToken && Date.now() < _tokenExpiry - 60000; // 1min buffer
+  if (!_googleAccessToken) return false;
+  if (!_tokenExpiry) return true; // assume valid if no expiry set
+  return Date.now() < _tokenExpiry - 30000; // 30sec buffer
 }
 
 function signInWithGoogle() {
@@ -3483,11 +3485,13 @@ function bootApp() {
     }
   }).catch(function(e) {
     console.error('Boot error:', e.message);
-    // Only show sign-in if it's an auth error, not a network error
     if (e.message === 'Not authenticated' || e.message === 'Unauthorized') {
+      // Clear stored token and force fresh sign-in
+      localStorage.removeItem('momentum_access_token');
+      localStorage.removeItem('momentum_token_expiry');
+      _googleAccessToken = null;
       showSignIn();
     } else {
-      // Network/server error — show a message but don't kick to sign-in
       document.getElementById('treeEl').innerHTML =
         '<div class="empty" style="padding:32px;">Connection error: ' + e.message +
         '<br><br><button onclick="bootApp()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:14px;">Retry</button></div>';
