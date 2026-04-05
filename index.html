@@ -3461,7 +3461,6 @@ function checkMobile() {
   // Mobile = phone UA, OR (touch device AND narrow screen)
   // Do NOT use hasTouch alone — touch-screen laptops/PCs would trigger mobile mode
   isMobile = uaMobile || (hasTouch && narrowWindow) || (narrowWindow && !hasTouch && window.innerWidth <= 640);
-  alert('mobile='+isMobile+' ua='+uaMobile+' touch='+hasTouch+' w='+window.innerWidth);
   applyMobileStyles();
 }
 
