@@ -215,7 +215,6 @@
   .is-mobile .modal { width: 100%; border-radius: 16px 16px 0 0; padding: 20px 20px 32px; }
   .is-mobile .icon-picker { width: calc(100vw - 24px); left: 12px !important; }
   .is-mobile .icon-picker-grid { grid-template-columns: repeat(8, 1fr); max-height: 180px; }
-  .is-mobile #backBtn { font-size: 13px; padding: 4px 8px; }
   .is-mobile .node-row { position: relative; overflow: hidden; }
 
   /* Same rules via media query as backup (Chrome emulation, slow JS) */
@@ -330,7 +329,6 @@
 
 <div class="app" id="app">
   <div class="toolbar">
-    <button id="backBtn" onclick="navBack()" style="display:none;margin-right:4px;" title="Go back (Alt+←)">← Back</button>
     <div id="hintBar" class="hint-bar">
       <span class="kbd">Enter</span> new &nbsp;
       <span class="kbd">⌘↩</span> move/assign &nbsp;
@@ -1102,6 +1100,17 @@ function attachEvents() {
     inp.addEventListener('input', function() {
       inp.style.height = 'auto';
       inp.style.height = inp.scrollHeight + 'px';
+      // Smart undo: push undo checkpoint at word boundaries
+      var val = inp.value;
+      var lastChar = val[val.length - 1];
+      // Push undo on space (word boundary) or punctuation
+      if (lastChar === ' ' || lastChar === '.' || lastChar === ',' || lastChar === '!' || lastChar === '?') {
+        var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
+        if (n && val.trim()) {
+          n.name = val; // update node name before pushing undo
+          pushUndo();
+        }
+      }
     });
   });
   el.querySelectorAll('.node-input:not([readonly])').forEach(inp => {
@@ -2379,7 +2388,7 @@ function claimOwnership() {
 }
 
 function zoomInto(id) {
-  pushNav();
+  pushUndo();
   zoomedId = id;
   updateZoomCrumb();
   render();
@@ -3160,10 +3169,12 @@ var MAX_UNDO = 30;
 function pushUndo() {
   undoStack.push({
     nodes: JSON.parse(JSON.stringify(nodes)),
-    collapsed: JSON.parse(JSON.stringify(collapsed))
+    collapsed: JSON.parse(JSON.stringify(collapsed)),
+    tab: activeTab,
+    zoomedId: zoomedId
   });
   if (undoStack.length > MAX_UNDO) undoStack.shift();
-  redoStack = []; // new action clears redo history
+  redoStack = [];
 }
 
 function undo() {
@@ -3201,6 +3212,12 @@ function undo() {
 
   nodes = prev.nodes;
   collapsed = prev.collapsed;
+  if (prev.tab && prev.tab !== activeTab) {
+    activeTab = prev.tab;
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === activeTab); });
+    document.querySelectorAll('.mobile-nav-btn').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === activeTab); });
+  }
+  if (prev.zoomedId !== undefined) { zoomedId = prev.zoomedId; updateZoomCrumb(); }
   saveCollapsed();
 
   var gen = opGeneration;
@@ -3863,7 +3880,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(checkMobile, 1000);
   document.querySelectorAll('.tab').forEach(function(t) {
     t.onclick = function() {
-      pushNav();
+      pushUndo();
       activeTab = t.dataset.tab;
       if (activeTab !== 'tree') zoomedId = null;
       document.querySelectorAll('.tab').forEach(function(x) { x.classList.remove('active'); });
@@ -3876,7 +3893,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Wire mobile nav buttons
   document.querySelectorAll('.mobile-nav-btn[data-tab]').forEach(function(btn) {
     btn.onclick = function() {
-      pushNav();
+      pushUndo();
       activeTab = btn.dataset.tab;
       if (activeTab !== 'tree') zoomedId = null;
       document.querySelectorAll('.mobile-nav-btn').forEach(function(x) { x.classList.remove('active'); });
