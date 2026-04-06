@@ -3485,13 +3485,22 @@ function applyMobileStyles() {
     // Reset to desktop
     if (body) { body.style.padding = ''; body.style.background = ''; body.style.alignItems = ''; }
     if (app) { app.style.maxWidth = ''; app.style.height = ''; app.style.borderRadius = ''; app.style.border = ''; app.style.boxShadow = ''; app.style.margin = ''; }
-    if (toolbar) { toolbar.style.height = ''; toolbar.style.padding = ''; }
+    if (toolbar) { toolbar.style.height = ''; toolbar.style.padding = ''; toolbar.style.fontSize = ''; }
     if (hintBar) hintBar.style.display = '';
     if (collapseBtn) collapseBtn.style.display = '';
     if (tabs) tabs.style.display = '';
     if (nav) nav.style.display = '';
     if (fab) fab.style.display = '';
     if (treeEl) treeEl.style.paddingBottom = '';
+    // Deactivate mobile style tag
+    var mst = document.getElementById('mobileStyleTag');
+    if (mst) mst.setAttribute('media', 'not all');
+    // Reset toolbar buttons
+    document.querySelectorAll('.toolbar button').forEach(function(b) {
+      b.style.fontSize = ''; b.style.padding = '';
+    });
+    var pill = document.getElementById('userPill');
+    if (pill) { pill.style.cssText = ''; pill.textContent = currentUser || ''; }
   }
 }
 
@@ -3597,6 +3606,8 @@ function attachMobileSwipe() {
 
   // ── TOUCHSTART ─────────────────────────────────────────────────────────────
   treeEl.addEventListener('touchstart', function(e) {
+    // Safety: if a ghost is stuck on screen, clean it up first
+    if (dragGhostEl) { cleanupDrag(); phase = 'idle'; }
     if (e.touches.length !== 1) { cancelTimer(); phase = 'idle'; return; }
     var t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
