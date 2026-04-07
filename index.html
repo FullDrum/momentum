@@ -3474,7 +3474,7 @@ function applyMobileStyles() {
       svg.style.width = '24px'; svg.style.height = '24px';
     });
     // FAB
-    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '68px'; fab.style.left = '16px'; fab.style.width = '52px'; fab.style.height = '52px'; fab.style.fontSize = '26px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
+    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '120px'; fab.style.right = '16px'; fab.style.width = '52px'; fab.style.height = '52px'; fab.style.fontSize = '26px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
     // Tree
     if (treeEl) treeEl.style.paddingBottom = '16px';
     // Activate mobile stylesheet
@@ -4027,13 +4027,23 @@ function showMobileActionSheet(nodeId) {
         showShare(nodeId);
       } else if (action === 'done' || action === 'undone') {
         pushUndo();
-        n.done = (action === 'done');
-        n.completedDate = n.done ? TODAY : null;
-        var descs = descendants(n.id);
-        [n.id].concat(descs).forEach(function(did) {
-          var dn = nodes.find(function(x){return x.id===did;});
-          if (dn && !dn.isSection) { dn.done = n.done; dn.completedDate = n.completedDate; scheduleSave(dn); }
+        var isDone = (action === 'done');
+        // Apply to all selected nodes if in selection mode, otherwise just this node
+        var targetIds = (selectionMode && selectedIds.size > 0) ? [...selectedIds] : [n.id];
+        targetIds.forEach(function(tid) {
+          var tn = nodes.find(function(x){ return x.id === tid; });
+          if (!tn || tn.isSection) return;
+          tn.done = isDone;
+          tn.completedDate = isDone ? TODAY : null;
+          scheduleSave(tn);
+          // Also mark descendants
+          descendants(tid).forEach(function(did) {
+            var dn = nodes.find(function(x){ return x.id === did; });
+            if (dn && !dn.isSection) { dn.done = isDone; dn.completedDate = tn.completedDate; scheduleSave(dn); }
+          });
         });
+        selectionMode = false;
+        selectedIds.clear();
         render();
       } else if (action === 'today') {
         pushUndo(); n.date = localDateTime(); scheduleSave(n); render();
@@ -4135,7 +4145,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   document.getElementById('collapseBtn').onclick = collapseAll;
   document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && opQueueDepth === 0 &&
+    if (!document.hidden && opQueueDepth === 0 && pendingSave.size === 0 &&
         document.activeElement && !document.activeElement.classList.contains('node-input')) {
       fetchAll();
     }
