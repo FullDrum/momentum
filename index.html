@@ -485,6 +485,7 @@ function setSyncDot(state) {
 }
 
 function flushSave() {
+  syncTimer = null; // reset so the 30s interval can fire again
   if (!pendingSave.size) return;
   var ids = [...pendingSave];
   pendingSave.clear();
@@ -501,7 +502,10 @@ function flushSave() {
         .catch(function(e) {
           setSyncDot('err');
           console.error('Save failed:', snap.id, e);
-          pendingSave.add(snap.id); // retry
+          pendingSave.add(snap.id); // mark for retry
+          // Re-arm the flush timer so the retry actually goes out
+          clearTimeout(syncTimer);
+          syncTimer = setTimeout(flushSave, 4000); // 4s back-off
         });
     });
   });
@@ -556,7 +560,22 @@ async function fetchAll() {
     activeId = activeInp.dataset.id;
     activeVal = activeInp.value.trim();
   }
+  // Snapshot local state of any nodes waiting to be saved, before the server
+  // data overwrites them. These IDs are in pendingSave but haven't flushed yet.
+  var pendingSnapshots = {};
+  pendingSave.forEach(function(id) {
+    var n = nodes.find(function(x) { return x.id === id; });
+    if (n) pendingSnapshots[id] = Object.assign({}, n);
+  });
+
   nodes = normalizeNodes(data.nodes || []);
+
+  // Re-apply local pending state so optimistic UI changes aren't lost
+  if (Object.keys(pendingSnapshots).length > 0) {
+    nodes.forEach(function(n, i) {
+      if (pendingSnapshots[n.id]) nodes[i] = Object.assign({}, n, pendingSnapshots[n.id]);
+    });
+  }
   // Also load team members
   gsr('getTeamMembers').then(function(members) { teamMembers = members || []; }).catch(function(){});
   // Restore unsaved content into the refreshed node
@@ -579,11 +598,50 @@ var GOOGLE_CLIENT_ID = '751338704263-1iso4ep0be9brhic463uc4ogkst6en2g.apps.googl
 // ── Auth state ────────────────────────────────────────────────────────────────
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
 var _tokenExpiry = parseInt(localStorage.getItem('momentum_token_expiry') || '0');
+var _tokenRefreshTimer = null;
+var _silentRefreshPromise = null; // deduplicate concurrent refresh attempts
 
 function isTokenValid() {
   if (!_googleAccessToken) return false;
   if (!_tokenExpiry) return true; // assume valid if no expiry set
   return Date.now() < _tokenExpiry - 30000; // 30sec buffer
+}
+
+// Proactive refresh: fires 5 min before the token expires
+function scheduleTokenRefresh() {
+  if (_tokenRefreshTimer) clearTimeout(_tokenRefreshTimer);
+  if (!_tokenExpiry) return;
+  var delay = _tokenExpiry - Date.now() - 5 * 60 * 1000; // 5 min early
+  if (delay < 0) delay = 0;
+  _tokenRefreshTimer = setTimeout(function() {
+    silentRefreshToken().catch(function() { /* will surface on next API call */ });
+  }, delay);
+}
+
+// Silent token refresh — reuses the existing Google session, no popup
+function silentRefreshToken() {
+  if (_silentRefreshPromise) return _silentRefreshPromise; // already in flight
+  _silentRefreshPromise = new Promise(function(resolve, reject) {
+    try {
+      var client = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile',
+        prompt: '',  // empty = silent; falls back to popup only if session is gone
+        callback: function(response) {
+          _silentRefreshPromise = null;
+          if (response.error) { reject(new Error(response.error)); return; }
+          _googleAccessToken = response.access_token;
+          _tokenExpiry = Date.now() + (response.expires_in * 1000);
+          localStorage.setItem('momentum_access_token', _googleAccessToken);
+          localStorage.setItem('momentum_token_expiry', _tokenExpiry);
+          scheduleTokenRefresh();
+          resolve();
+        }
+      });
+      client.requestAccessToken();
+    } catch(e) { _silentRefreshPromise = null; reject(e); }
+  });
+  return _silentRefreshPromise;
 }
 
 function signInWithGoogle() {
@@ -595,10 +653,11 @@ function signInWithGoogle() {
         alert('Sign-in error: ' + response.error);
         return;
       }
-        _googleAccessToken = response.access_token;
+      _googleAccessToken = response.access_token;
       _tokenExpiry = Date.now() + (response.expires_in * 1000);
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
+      scheduleTokenRefresh();
       showApp();
       bootApp();
     }
@@ -633,8 +692,13 @@ function showApp() {
 function gsr(fnName, arg) {
   return new Promise(function(resolve, reject) {
     if (!isTokenValid()) {
-      showSignIn();
-      reject(new Error('Not authenticated'));
+      silentRefreshToken().then(function() {
+        // Retry the call with the fresh token
+        gsr(fnName, arg).then(resolve).catch(reject);
+      }).catch(function() {
+        showSignIn();
+        reject(new Error('Not authenticated'));
+      });
       return;
     }
     // Apps Script requires text/plain to avoid CORS preflight
@@ -4159,15 +4223,22 @@ document.addEventListener('DOMContentLoaded', function() {
       fetchAll();
     }
   });
-  // Boot: check for valid token
+  // Boot: check for valid token, or try silent refresh
   if (isTokenValid()) {
+    scheduleTokenRefresh();
     showApp();
     bootApp();
   } else {
-    showSignIn();
-    // Clear stale token
-    localStorage.removeItem('momentum_access_token');
-    localStorage.removeItem('momentum_token_expiry');
+    // Token missing or expired — try to silently get a fresh one before
+    // forcing the user to click Sign In again
+    silentRefreshToken().then(function() {
+      showApp();
+      bootApp();
+    }).catch(function() {
+      showSignIn();
+      localStorage.removeItem('momentum_access_token');
+      localStorage.removeItem('momentum_token_expiry');
+    });
   }
 });
 
