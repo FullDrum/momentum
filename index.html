@@ -1439,6 +1439,9 @@ function handleKey(e, inp) {
     render();
     return;
   }
+
+  // ── Tree-mode Enter: new child (if expanded) or sibling (if collapsed/leaf) ─
+  if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
