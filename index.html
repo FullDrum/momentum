@@ -1362,7 +1362,9 @@ function handleKey(e, inp) {
     return;
   }
 
-  // Flat view Enter: create new sibling under same parent, dated today
+  // Flat view Enter:
+  //   depth 0 (root task) → new flat task with today's date (current behaviour)
+  //   depth > 0 (child)   → new tree sibling after descendants, same parentId, inherits date
   if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey && (inp.dataset.flat === 'true' || inp.dataset.flat === true)) {
     e.preventDefault();
     pushUndo();
@@ -1371,23 +1373,65 @@ function handleKey(e, inp) {
       gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
     }
     var si = nodes.findIndex(x => x.id === id);
-    // Insert after cur's descendants
     var ownDesc = descendants(id);
     var insertAt = si + 1;
     for (var di = si + 1; di < nodes.length; di++) {
       if (ownDesc.indexOf(nodes[di].id) > -1) insertAt = di + 1;
       else break;
     }
-    // Child nodes (have a real parent) keep their parent; root flat nodes use lastPickedSection
-    var newParentId = cur.parentId || lastPickedSection || null;
+    var currentDepth = vi > -1 ? (list[vi].depth || 0) : 0;
+    var nn;
+    if (currentDepth === 0) {
+      // Root flat node — new task with today's date under the picked section
+      nn = {
+        id: newId(), name: '',
+        parentId: lastPickedSection || cur.parentId || null,
+        isSection: false, done: false,
+        date: localDateTime(),
+        owner: currentUser,
+        assignedTo: lastPickedAssignee || null,
+        assignedBy: lastPickedAssignee ? (currentUser || '') : null,
+        order: orderBetween(insertAt - 1, insertAt)
+      };
+    } else {
+      // Child node — tree sibling, same parentId, inherit date so it stays visible
+      nn = {
+        id: newId(), name: '',
+        parentId: cur.parentId || null,
+        isSection: false, done: false,
+        date: cur.date || null,
+        owner: currentUser,
+        order: orderBetween(insertAt - 1, insertAt)
+      };
+    }
+    nodes.splice(insertAt, 0, nn);
+    focusId = nn.id;
+    render();
+    return;
+  }
+
+  // ── Shift+Enter: new tree sibling below current node (all views) ─────────
+  // Inserts after the current node and all its descendants, preserving parentId.
+  if (e.key === 'Enter' && e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey) {
+    e.preventDefault();
+    pushUndo();
+    cur.name = inp.value;
+    if (cur.name.trim()) {
+      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+    }
+    var si = nodes.findIndex(x => x.id === id);
+    var ownDesc = descendants(id);
+    var insertAt = si + 1;
+    for (var di = si + 1; di < nodes.length; di++) {
+      if (ownDesc.indexOf(nodes[di].id) > -1) insertAt = di + 1;
+      else break;
+    }
     var nn = {
       id: newId(), name: '',
-      parentId: newParentId,
+      parentId: cur.parentId || null,
       isSection: false, done: false,
-      date: localDateTime(),
+      date: cur.date || null,
       owner: currentUser,
-      assignedTo: lastPickedAssignee || null,
-      assignedBy: lastPickedAssignee ? (currentUser || '') : null,
       order: orderBetween(insertAt - 1, insertAt)
     };
     nodes.splice(insertAt, 0, nn);
@@ -1395,8 +1439,6 @@ function handleKey(e, inp) {
     render();
     return;
   }
-
-  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
@@ -1431,28 +1473,6 @@ function handleKey(e, inp) {
       order: orderBetween(insertAt - 1, insertAt)
     };
     nodes.splice(insertAt, 0, nn);
-    focusId = nn.id;
-    render();
-    return;
-  }
-
-  // ── Shift+Enter: new sibling above current node ───────────────
-  if (e.key === 'Enter' && e.shiftKey) {
-    e.preventDefault();
-    pushUndo();
-    cur.name = inp.value;
-    if (cur.name.trim()) {
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
-    }
-    var si = nodes.findIndex(x => x.id === id);
-    var nn = {
-      id: newId(), name: '',
-      parentId: cur.parentId || null,
-      isSection: false, done: false,
-      date: localDateTime(), owner: currentUser,
-      order: orderBetween(si - 1, si)
-    };
-    nodes.splice(si, 0, nn);
     focusId = nn.id;
     render();
     return;
