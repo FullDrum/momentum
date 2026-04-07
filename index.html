@@ -1571,6 +1571,19 @@ function handleKey(e, inp) {
     return;
   }
 
+  // ── Ctrl+Shift+X: promote to today ──────────────────────────
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
+    e.preventDefault();
+    if (!cur.isSection) {
+      pushUndo();
+      cur.name = inp.value.trim() || cur.name;
+      cur.date = localDateTime();
+      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      render();
+    }
+    return;
+  }
+
   // ── Ctrl+Shift+S: toggle section ────────────────────────────
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'S') {
     e.preventDefault();
