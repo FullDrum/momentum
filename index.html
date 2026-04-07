@@ -1022,12 +1022,14 @@ function rowHTML(n, depth, flat = false) {
       if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
     }
     var nd = n.date ? n.date.slice(0,10) : null;
-    meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="Tap to set to today">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
+    var isToday = nd === TODAY;
+    meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
     else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
-    meta = '<span class="today-badge' + (nd2 === TODAY ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="Tap to set to today">' + (nd2 === TODAY ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>';
+    var isToday2 = nd2 === TODAY;
+    meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>';
     if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
   }
 
@@ -1189,9 +1191,17 @@ function attachEvents() {
       e.stopPropagation();
       var n = nodes.find(function(x){ return x.id === badge.dataset.settoday; });
       if (!n || n.isSection) return;
-      if (n.date && n.date.slice(0,10) === TODAY) return; // already today
       pushUndo();
-      n.date = localDateTime();
+      if (n.date && n.date.slice(0,10) === TODAY) {
+        // Demote: set to yesterday so it leaves the Today tab but keeps a date
+        var yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        n.date = yest.getFullYear() + '-' +
+          String(yest.getMonth()+1).padStart(2,'0') + '-' +
+          String(yest.getDate()).padStart(2,'0') + ' 00:00:00';
+      } else {
+        n.date = localDateTime();
+      }
       scheduleSave(n);
       render();
     };
