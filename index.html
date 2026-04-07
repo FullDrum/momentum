@@ -3981,6 +3981,10 @@ function showMobileActionSheet(nodeId) {
   if (!n) return;
   var existing = document.getElementById('mobileSheet');
   if (existing) existing.remove();
+  // Snapshot selected IDs at open time — they may get cleared before action fires
+  var snapshotIds = (selectionMode && selectedIds.size > 0) ? [...selectedIds] : [nodeId];
+  // Make sure the tapped node is included
+  if (snapshotIds.indexOf(nodeId) === -1) snapshotIds.push(nodeId);
 
   var sheet = document.createElement('div');
   sheet.id = 'mobileSheet';
@@ -4029,7 +4033,7 @@ function showMobileActionSheet(nodeId) {
         pushUndo();
         var isDone = (action === 'done');
         // Apply to all selected nodes if in selection mode, otherwise just this node
-        var targetIds = (selectionMode && selectedIds.size > 0) ? [...selectedIds] : [n.id];
+        var targetIds = snapshotIds.length > 1 ? snapshotIds : [n.id];
         targetIds.forEach(function(tid) {
           var tn = nodes.find(function(x){ return x.id === tid; });
           if (!tn || tn.isSection) return;
@@ -4046,7 +4050,12 @@ function showMobileActionSheet(nodeId) {
         selectedIds.clear();
         render();
       } else if (action === 'today') {
-        pushUndo(); n.date = localDateTime(); scheduleSave(n); render();
+        pushUndo();
+        snapshotIds.forEach(function(tid) {
+          var tn = nodes.find(function(x){ return x.id === tid; });
+          if (tn && !tn.isSection) { tn.date = localDateTime(); scheduleSave(tn); }
+        });
+        render();
       } else if (action === 'move') {
         selectedIds.clear(); selectedIds.add(n.id); bulkMove();
       } else if (action === 'assign') {
