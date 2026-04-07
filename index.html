@@ -861,16 +861,29 @@ function render(preserveScroll) {
   }
 
   if (activeTab === 'all' || activeTab === 'assigned') {
-    var byDate = {};
-    list.forEach(({ node: n }) => {
-      var k = n.date ? n.date.slice(0, 10) : 'undated';
-      (byDate[k] = byDate[k] || []).push(n);
+    // Group by date using only depth-0 (root) nodes for section headers.
+    // Children (depth > 0) are rendered immediately after their parent,
+    // not in a separate date group.
+    var groups = []; // [{key, items:[{node,depth,flat}]}]
+    var keyOrder = [];
+    var keyMap = {};
+    list.forEach(function(item) {
+      if (item.depth === 0) {
+        var k = item.node.date ? item.node.date.slice(0, 10) : 'undated';
+        if (!keyMap[k]) { keyMap[k] = []; keyOrder.push(k); }
+        keyMap[k].push(item);
+      } else {
+        // Attach to whichever group was last opened
+        var lastKey = keyOrder[keyOrder.length - 1];
+        if (lastKey) keyMap[lastKey].push(item);
+      }
     });
-    var keys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-    el.innerHTML = keys.map(k => {
+    keyOrder.sort(function(a, b) { return b.localeCompare(a); });
+    el.innerHTML = keyOrder.map(function(k) {
       var lbl = k === TODAY ? TODAYLABEL : k === 'undated' ? 'Undated'
         : new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
-      return `<div class="section-label">${lbl}</div>` + byDate[k].map(n => rowHTML(n, 0, true)).join('');
+      return '<div class="section-label">' + lbl + '</div>' +
+        keyMap[k].map(function(item) { return rowHTML(item.node, item.depth, item.flat); }).join('');
     }).join('');
   } else {
     var html = activeTab === 'today' ? `<div class="section-label">${TODAYLABEL}</div>` : '';
@@ -1365,9 +1378,11 @@ function handleKey(e, inp) {
       if (ownDesc.indexOf(nodes[di].id) > -1) insertAt = di + 1;
       else break;
     }
+    // Child nodes (have a real parent) keep their parent; root flat nodes use lastPickedSection
+    var newParentId = cur.parentId || lastPickedSection || null;
     var nn = {
       id: newId(), name: '',
-      parentId: lastPickedSection || cur.parentId || null,
+      parentId: newParentId,
       isSection: false, done: false,
       date: localDateTime(),
       owner: currentUser,
