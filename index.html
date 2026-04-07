@@ -122,6 +122,8 @@
   .assignee-badge { font-size: 10px; padding: 1px 7px; border-radius: 8px; margin-right: 4px; white-space: nowrap; flex-shrink: 0; background: var(--blue-bg); color: var(--blue-text);  align-self: flex-start; margin-top: 5px; }
   .zoom-btn { color: var(--text3); }
   .act-btn { background: none; border: none; cursor: pointer; font-size: 11px; color: var(--text3); padding: 2px 5px; border-radius: 3px; opacity: 0; flex-shrink: 0; white-space: nowrap;  align-self: flex-start; margin-top: 4px; }
+  .mobile-menu-btn { display: none; font-size: 20px; color: var(--text3); padding: 6px 8px; cursor: pointer; align-self: center; flex-shrink: 0; background: none; border: none; font-family: inherit; }
+  .is-mobile .mobile-menu-btn { display: flex; align-items: center; }
   .node-row:hover .act-btn, .node-row.focused .act-btn { opacity: 1; }
   .act-btn:hover { color: var(--text); background: var(--bg3); }
   .section-label { font-size: 10px; color: var(--text3); padding: 10px 14px 2px; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -346,8 +348,9 @@
       <button onclick="bulkMove()" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text);">Move</button>
       <button onclick="clearSelection();selectionMode=false;" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text2);">✕ Deselect</button>
     </div>
-    <span class="sync-dot" id="syncDot"></span>
-    <span class="user-pill" id="userPill" style="cursor:pointer;" onclick="switchUser()" title="Click to switch user">loading…</span>
+    <span id="userAvatar" onclick="switchUser()" title="Click to switch user" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--text3);color:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:background 0.3s;">?</span>
+    <span class="user-pill" id="userPill" style="display:none;"></span>
+    <span class="sync-dot" id="syncDot" style="display:none;"></span>
     <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)">↩</button>
     <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)">↪</button>
     <button id="collapseBtn">Collapse all</button>
@@ -467,9 +470,17 @@ function scheduleSave(node) {
 }
 
 function setSyncDot(state) {
-  var dot = document.getElementById('syncDot');
-  if (!dot) return;
-  dot.className = 'sync-dot' + (state === 'syncing' ? ' syncing' : state === 'err' ? ' err' : '');
+  var avatar = document.getElementById('userAvatar');
+  if (!avatar) return;
+  var colors = { syncing: '#f0a500', ok: '#3aaa6e', err: '#e24b4a' };
+  avatar.style.background = colors[state] || 'var(--accent)';
+  // Reset to accent after ok
+  if (state === 'ok') {
+    setTimeout(function() {
+      var a = document.getElementById('userAvatar');
+      if (a) a.style.background = 'var(--accent)';
+    }, 2000);
+  }
 }
 
 function flushSave() {
@@ -530,6 +541,12 @@ async function fetchAll() {
   }
   var pill = document.getElementById('userPill');
   if (pill) pill.textContent = currentUser || 'unknown';
+  var avatar = document.getElementById('userAvatar');
+  if (avatar && currentUser) {
+    avatar.textContent = currentUser[0].toUpperCase();
+    avatar.style.background = 'var(--accent)';
+    avatar.title = currentUser + ' — click to sign out';
+  }
   // Don't overwrite active input - save it first
   var activeInp = document.activeElement;
   var activeId = null;
@@ -927,7 +944,8 @@ function rowHTML(n, depth, flat = false) {
   var dragHandle = flat ? '' : '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
   var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
   var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
-  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileZoom}${mobileToggle}</div>`;
+  var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">⋯</button>' : '';
+  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileMenu}${mobileZoom}${mobileToggle}</div>`;
 }
 
 function attachEvents() {
@@ -1020,6 +1038,12 @@ function attachEvents() {
   });
   el.querySelectorAll('[data-zoom]').forEach(b => b.onclick = e => {
     e.stopPropagation(); zoomInto(b.dataset.zoom);
+  });
+  el.querySelectorAll('[data-mobilemenu]').forEach(function(btn) {
+    btn.onclick = function(e) {
+      e.stopPropagation();
+      showMobileActionSheet(btn.dataset.mobilemenu);
+    };
   });
   el.querySelectorAll('[data-goto]').forEach(b => b.onclick = e => {
     e.stopPropagation();
@@ -3413,13 +3437,9 @@ function applyMobileStyles() {
     var redoBtn = document.getElementById('redoBtn');
     if (undoBtn) { undoBtn.style.fontSize = '18px'; undoBtn.style.padding = '5px 10px'; }
     if (redoBtn) { redoBtn.style.fontSize = '18px'; redoBtn.style.padding = '5px 10px'; }
-    var pill = document.getElementById('userPill');
-    if (pill) {
-      // Show as avatar circle with first letter
-      var letter = (currentUser || '?')[0].toUpperCase();
-      pill.textContent = letter;
-      pill.style.cssText = 'width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0;border:none;';
-    }
+    // Avatar is already set — just resize for mobile
+    var avatar = document.getElementById('userAvatar');
+    if (avatar) { avatar.style.width = '34px'; avatar.style.height = '34px'; avatar.style.fontSize = '15px'; }
     var syncDot = document.getElementById('syncDot');
     if (syncDot) { syncDot.style.width = '14px'; syncDot.style.height = '14px'; }
     // Hide top tabs, show bottom nav
@@ -3516,8 +3536,8 @@ function applyMobileStyles() {
     document.querySelectorAll('.toolbar button').forEach(function(b) {
       b.style.fontSize = ''; b.style.padding = '';
     });
-    var pill = document.getElementById('userPill');
-    if (pill) { pill.style.cssText = ''; pill.textContent = currentUser || ''; }
+    var avatar = document.getElementById('userAvatar');
+    if (avatar) { avatar.style.width = '28px'; avatar.style.height = '28px'; avatar.style.fontSize = '13px'; }
   }
 }
 
@@ -3823,6 +3843,191 @@ attachEvents = function() {
   attachMobileSwipe();
 };
 
+
+document.addEventListener('keydown', function(e) {
+  var inInput = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+  // Ctrl+Shift+F or / (not in input): open search
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+    e.preventDefault();
+    openSearch();
+    return;
+  }
+  if (e.key === '/' && !inInput) {
+    e.preventDefault();
+    openSearch();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    undo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+    e.preventDefault();
+    redo();
+    return;
+  }
+  // Alt+Left: back navigation
+  if (e.altKey && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    navBack();
+    return;
+  }
+
+  // Ctrl+Shift+X: promote focused node to today
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
+    e.preventDefault();
+    var focusedNode = nodes.find(function(n) { return n.id === focusId; });
+    if (focusedNode && !focusedNode.isSection) {
+      pushUndo();
+      // Save current input value first
+      var inp = focusId ? document.getElementById('inp_' + focusId) : null;
+      if (inp && inp.value.trim()) focusedNode.name = inp.value.trim();
+      focusedNode.date = localDateTime();
+      gsr('saveNodeServer', Object.assign({}, focusedNode)).catch(function(){});
+      render();
+    }
+    return;
+  }
+
+  // Ctrl+Shift+C: collapse/expand focused node or all
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+    e.preventDefault();
+    if (focusId) {
+      // Toggle collapse of focused node
+      if (children(focusId).length > 0) {
+        collapsed[focusId] = !collapsed[focusId];
+        saveCollapsed();
+        render();
+      }
+    } else {
+      collapseAll();
+    }
+    return;
+  }
+
+  // Ctrl+Shift+S: toggle section/task for all selected nodes (works even in textarea)
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's') && selectedIds.size > 0) {
+    e.preventDefault();
+    pushUndo();
+    selectedIds.forEach(function(id) {
+      var n = nodes.find(function(x) { return x.id === id; });
+      if (!n) return;
+      n.isSection = !n.isSection;
+      if (!n.isSection && !n.date) n.date = localDateTime();
+      gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+    });
+    render();
+    return;
+  }
+  // Delete/Backspace with selected nodes (not in input)
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput && selectedIds.size > 0) {
+    e.preventDefault();
+    var names = [...selectedIds].map(function(id) {
+      var n = nodes.find(x => x.id === id);
+      return n ? '"' + (n.name || 'unnamed') + '"' : id;
+    }).join(', ');
+    var totalChildren = [...selectedIds].reduce(function(acc, id) {
+      return acc + descendants(id).length;
+    }, 0);
+    var msg = 'Delete ' + selectedIds.size + ' item' + (selectedIds.size > 1 ? 's' : '') +
+      (totalChildren > 0 ? ' and ' + totalChildren + ' child item' + (totalChildren === 1 ? '' : 's') : '') + '?';
+    showDeleteConfirm(msg, function() {
+      saveActiveInput();
+      pushUndo();
+      var toDelete = new Set();
+      selectedIds.forEach(function(id) {
+        toDelete.add(id);
+        descendants(id).forEach(function(d) { toDelete.add(d); });
+      });
+      var snapToDelete = [...toDelete]; // capture before modifying nodes
+      nodes = nodes.filter(function(n) { return !toDelete.has(n.id); });
+      deleteRemote(null, snapToDelete);
+      selectedIds.clear();
+      updateSelectionStyles();
+      render();
+    });
+  }
+});
+
+function showMobileActionSheet(nodeId) {
+  var n = nodes.find(function(x) { return x.id === nodeId; });
+  if (!n) return;
+  var existing = document.getElementById('mobileSheet');
+  if (existing) existing.remove();
+
+  var sheet = document.createElement('div');
+  sheet.id = 'mobileSheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;justify-content:flex-end;';
+  sheet.innerHTML =
+    '<div style="flex:1;background:rgba(0,0,0,0.3);" id="sheetBackdrop"></div>' +
+    '<div style="background:var(--bg);border-radius:16px 16px 0 0;padding:8px 0 32px;max-height:60vh;overflow-y:auto;">' +
+      '<div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:8px auto 16px;"></div>' +
+      '<div style="padding:0 8px;font-size:12px;color:var(--text3);margin-bottom:4px;padding-left:20px;">' + esc(n.name||'').slice(0,40) + '</div>' +
+      (canEdit(n) ? [
+        !n.done ? '<button class="msa-btn" data-action="done">✓ Mark done</button>' : '<button class="msa-btn" data-action="undone">↩ Mark not done</button>',
+        !n.isSection ? '<button class="msa-btn" data-action="today">📅 Schedule today</button>' : '',
+        '<button class="msa-btn" data-action="section">' + (n.isSection ? '→ Convert to task' : '→ Convert to section') + '</button>',
+        '<button class="msa-btn" data-action="move">↗ Move to section</button>',
+        !n.isSection ? '<button class="msa-btn" data-action="assign">👤 Assign</button>' : '',
+        isOwner(n) ? '<button class="msa-btn" data-action="share">🔗 Share</button>' : '',
+        isOwner(n) ? '<button class="msa-btn" style="color:#e24b4a;" data-action="delete">✕ Delete</button>' : ''
+      ].join('') : '<div style="padding:16px 20px;color:var(--text3);font-size:13px;">Read-only</div>') +
+    '</div>';
+
+  sheet.style.cssText += '';
+  document.body.appendChild(sheet);
+
+  // Add action button styles
+  sheet.querySelectorAll('.msa-btn').forEach(function(btn) {
+    btn.style.cssText = 'display:block;width:100%;padding:14px 20px;border:none;background:none;text-align:left;font-size:15px;font-family:inherit;color:var(--text);cursor:pointer;border-bottom:0.5px solid var(--border);';
+    btn.onmousedown = function() { btn.style.background = 'var(--bg2)'; };
+    btn.onmouseup = btn.onmouseleave = function() { btn.style.background = ''; };
+  });
+
+  sheet.querySelector('#sheetBackdrop').onclick = function() { sheet.remove(); };
+
+  sheet.querySelectorAll('[data-action]').forEach(function(btn) {
+    btn.onclick = function() {
+      sheet.remove();
+      var action = btn.dataset.action;
+      if (action === 'section') {
+        pushUndo();
+        n.isSection = !n.isSection;
+        if (!n.isSection && !n.date) n.date = localDateTime();
+        gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+        render();
+      } else if (action === 'share') {
+        showShare(nodeId);
+      } else if (action === 'done' || action === 'undone') {
+        pushUndo();
+        n.done = (action === 'done');
+        n.completedDate = n.done ? TODAY : null;
+        var descs = descendants(n.id);
+        [n.id].concat(descs).forEach(function(did) {
+          var dn = nodes.find(function(x){return x.id===did;});
+          if (dn && !dn.isSection) { dn.done = n.done; dn.completedDate = n.completedDate; scheduleSave(dn); }
+        });
+        render();
+      } else if (action === 'today') {
+        pushUndo(); n.date = localDateTime(); scheduleSave(n); render();
+      } else if (action === 'move') {
+        selectedIds.clear(); selectedIds.add(n.id); bulkMove();
+      } else if (action === 'assign') {
+        selectedIds.clear(); selectedIds.add(n.id); bulkAssign();
+      } else if (action === 'delete') {
+        var childCount = descendants(n.id).length;
+        var msg = childCount ? 'Delete "' + (n.name||'item') + '" and ' + childCount + ' children?' : 'Delete "' + (n.name||'item') + '"?';
+        showDeleteConfirm(msg, function() {
+          var snapIds = [n.id].concat(descendants(n.id));
+          nodes = nodes.filter(function(x){ return snapIds.indexOf(x.id) === -1; });
+          deleteRemote(null, snapIds);
+          render();
+        });
+      }
+    };
+  });
+}
 
 function switchUser() {
   localStorage.removeItem('momentum_user_email');
