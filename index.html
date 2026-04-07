@@ -806,7 +806,33 @@ function visibleList() {
   else if (activeTab === 'all') tasks = nodes.filter(n => !n.isSection && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  return tasks.map(n => ({ node: n, depth: 0, flat: true }));
+
+  // Expand each matched task with its children in tree order.
+  // Children already in the task set only appear under their parent (deduped).
+  var taskSet = new Set(tasks.map(n => n.id));
+  var seen = new Set();
+
+  function expandNode(n, depth) {
+    if (seen.has(n.id)) return [];
+    seen.add(n.id);
+    var result = [{ node: n, depth: depth, flat: true }];
+    children(n.id).filter(function(c) {
+      return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
+    }).forEach(function(c) {
+      result = result.concat(expandNode(c, depth + 1));
+    });
+    return result;
+  }
+
+  var expanded = [];
+  tasks.forEach(function(n) {
+    if (seen.has(n.id)) return; // already rendered as a child
+    // If this node's parent is also in the task set it will be rendered
+    // under its parent when that parent is processed — skip it here
+    if (n.parentId && taskSet.has(n.parentId)) return;
+    expanded = expanded.concat(expandNode(n, 0));
+  });
+  return expanded;
 }
 function isOwner(n) { return !n.owner || n.owner === '' || n.owner === currentUser; }
 function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo === currentUser); }
@@ -977,8 +1003,11 @@ function rowHTML(n, depth, flat = false) {
 
   var meta = '';
   if (flat) {
-    var bc = breadcrumb(n.id);
-    if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
+    // Only show breadcrumb for root-level flat nodes — children have their parent visible above them
+    if (depth === 0) {
+      var bc = breadcrumb(n.id);
+      if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
+    }
     var nd = n.date ? n.date.slice(0,10) : null;
     meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="Tap to set to today">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
