@@ -100,7 +100,8 @@
   .is-mobile .node-display.is-section { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; white-space: normal; }
   .is-mobile .node-display.expanded { -webkit-line-clamp: unset; display: block; }
   .mobile-show-more { display: none; font-size: 20px; color: var(--text3); padding: 2px 8px; cursor: pointer; background: none; border: none; font-family: inherit; margin-top: 4px; }
-  .is-mobile .mobile-show-more { display: inline-block; }
+  .is-mobile .mobile-show-more { display: none; }
+  .is-mobile .mobile-show-more.needed { display: inline-block; }
   .node-display.done { text-decoration: line-through; color: var(--text3); }
   .node-display.is-section { font-weight: 600; }
   .node-display.readonly { color: var(--text2); cursor: default; }
@@ -915,12 +916,12 @@ function rowHTML(n, depth, flat = false) {
     var bc = breadcrumb(n.id);
     if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
     var nd = n.date ? n.date.slice(0,10) : null;
-    meta += `<span class="today-badge${nd === TODAY ? ' is-today' : ''}">${nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—'}</span>`;
+    meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="Tap to set to today">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
     else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
-    meta = `<span class="today-badge${nd2 === TODAY ? ' is-today' : ''}">${nd2 === TODAY ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—'}</span>`;
+    meta = '<span class="today-badge' + (nd2 === TODAY ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="Tap to set to today">' + (nd2 === TODAY ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>';
     if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
   }
 
@@ -1076,6 +1077,19 @@ function attachEvents() {
   el.querySelectorAll('[data-promote]').forEach(b => b.onclick = e => {
     e.stopPropagation(); var n = nodes.find(x => x.id === b.dataset.promote);
     if (n) { pushUndo(); n.date = localDateTime(); scheduleSave(n); render(); }
+  });
+  el.querySelectorAll('[data-settoday]').forEach(function(badge) {
+    badge.onclick = function(e) {
+      e.stopPropagation();
+      var n = nodes.find(function(x){ return x.id === badge.dataset.settoday; });
+      if (!n || n.isSection) return;
+      if (n.date && n.date.slice(0,10) === TODAY) return; // already today
+      pushUndo();
+      n.date = localDateTime();
+      scheduleSave(n);
+      render();
+    };
+    badge.style.cursor = 'pointer';
   });
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = e => {
     e.stopPropagation();
@@ -3460,7 +3474,7 @@ function applyMobileStyles() {
       svg.style.width = '24px'; svg.style.height = '24px';
     });
     // FAB
-    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '68px'; fab.style.right = '16px'; fab.style.width = '52px'; fab.style.height = '52px'; fab.style.fontSize = '26px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
+    if (fab) { fab.style.display = 'flex'; fab.style.position = 'absolute'; fab.style.bottom = '68px'; fab.style.left = '16px'; fab.style.width = '52px'; fab.style.height = '52px'; fab.style.fontSize = '26px'; fab.style.borderRadius = '50%'; fab.style.background = 'var(--accent)'; fab.style.color = 'var(--bg)'; fab.style.border = 'none'; fab.style.alignItems = 'center'; fab.style.justifyContent = 'center'; fab.style.zIndex = '51'; fab.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'; fab.style.cursor = 'pointer'; }
     // Tree
     if (treeEl) treeEl.style.paddingBottom = '16px';
     // Activate mobile stylesheet
@@ -3488,6 +3502,18 @@ function applyMobileStyles() {
       treeEl.querySelectorAll('.node-display').forEach(function(el) {
         el.style.fontSize = el.classList.contains('is-section') ? '18px' : '17px';
         el.style.padding = '9px 4px'; el.style.lineHeight = '1.6'; el.style.alignSelf = 'center';
+        // Show/hide the expand button based on whether text is clamped
+        var id = el.dataset.disp;
+        var btn = id ? treeEl.querySelector('[data-showmore="' + id + '"]') : null;
+        if (btn) {
+          // Check if text is actually truncated (scrollHeight > clientHeight)
+          var isExpanded = el.classList.contains('expanded');
+          if (!isExpanded && el.scrollHeight > el.clientHeight + 2) {
+            btn.classList.add('needed');
+          } else if (!isExpanded) {
+            btn.classList.remove('needed');
+          }
+        }
       });
       treeEl.querySelectorAll('.node-input').forEach(function(el) {
         el.style.fontSize = el.classList.contains('is-section') ? '18px' : '17px';
