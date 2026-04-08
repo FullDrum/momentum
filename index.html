@@ -623,13 +623,20 @@ function silentRefreshToken() {
   if (_silentRefreshPromise) return _silentRefreshPromise; // already in flight
   _silentRefreshPromise = new Promise(function(resolve, reject) {
     try {
+      var hint = localStorage.getItem('momentum_user_email') || '';
       var client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile',
-        prompt: '',  // empty = silent; falls back to popup only if session is gone
+        prompt: 'none',       // truly silent — no UI at all
+        login_hint: hint,     // skip account chooser
         callback: function(response) {
           _silentRefreshPromise = null;
-          if (response.error) { reject(new Error(response.error)); return; }
+          if (response.error) {
+            // interaction_required / consent_required = Google wants user action
+            // access_denied / other = genuine failure
+            reject(new Error(response.error));
+            return;
+          }
           _googleAccessToken = response.access_token;
           _tokenExpiry = Date.now() + (response.expires_in * 1000);
           localStorage.setItem('momentum_access_token', _googleAccessToken);
@@ -4257,11 +4264,15 @@ function bootApp() {
   }).catch(function(e) {
     console.error('Boot error:', e.message);
     if (e.message === 'Not authenticated' || e.message === 'Unauthorized') {
-      // Clear stored token and force fresh sign-in
-      localStorage.removeItem('momentum_access_token');
-      localStorage.removeItem('momentum_token_expiry');
-      _googleAccessToken = null;
-      showSignIn();
+      // Try silent refresh before giving up — Apps Script can return 401 transiently
+      silentRefreshToken().then(function() {
+        bootApp(); // retry once with fresh token
+      }).catch(function() {
+        localStorage.removeItem('momentum_access_token');
+        localStorage.removeItem('momentum_token_expiry');
+        _googleAccessToken = null;
+        showSignIn();
+      });
     } else {
       document.getElementById('treeEl').innerHTML =
         '<div class="empty" style="padding:32px;">Connection error: ' + e.message +
