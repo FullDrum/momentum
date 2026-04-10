@@ -1031,14 +1031,14 @@ function rowHTML(n, depth, flat = false) {
     }
     var nd = n.date ? n.date.slice(0,10) : null;
     var isToday = nd === TODAY;
-    meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
     else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
+    meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
     var isToday2 = nd2 === TODAY;
-    meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>';
     if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
+    meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>' + meta;
   }
 
   var acts = '';
@@ -1058,7 +1058,7 @@ function rowHTML(n, depth, flat = false) {
     n.assignedBy === currentUser && n.assignedTo !== currentUser ? 'assigned-by-me' : ''
   ].filter(Boolean).join(' ');
   var selState = selectedIds.has(n.id) ? '●' : '○';
-  var dragHandle = flat ? '' : '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
+  var dragHandle = '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
   var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
   var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
   var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">⋯</button>' : '';
@@ -2383,8 +2383,8 @@ function searchRowHTML(n) {
 
   var meta = '';
   if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + bcHtml + '</span>';
-  meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
   if (n.assignedTo && n.assignedTo !== currentUser) meta += '<span class="assignee-badge">' + esc(getMemberName(n.assignedTo)) + '</span>';
+  meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
 
   var acts = '';
   if (canEdit(n)) {
@@ -3395,21 +3395,34 @@ function performDrop(srcIds, tgtId, mode) {
   var newParentId, insertAt;
 
   if (mode === 'child') {
-    newParentId = tgtId;
-    insertAt = tgtIdx + descendants(tgtId).length + 1;
-    collapsed[tgtId] = false;
-    saveCollapsed();
-  } else if (mode === 'above') {
-    newParentId = tgt.parentId;
-    insertAt = tgtIdx;
-  } else {
-    newParentId = tgt.parentId;
-    insertAt = tgtIdx + descendants(tgtId).length + 1;
+    // In flat views (today/all/assigned), treat 'child' as 'below' — no nesting
+    var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
+    if (isFlat) {
+      mode = 'below';
+    } else {
+      newParentId = tgtId;
+      insertAt = tgtIdx + descendants(tgtId).length + 1;
+      collapsed[tgtId] = false;
+      saveCollapsed();
+    }
+  }
+  if (mode !== 'child') {
+    if (mode === 'above') {
+      newParentId = tgt.parentId;
+      insertAt = tgtIdx;
+    } else {
+      newParentId = tgt.parentId;
+      insertAt = tgtIdx + descendants(tgtId).length + 1;
+    }
   }
 
+  var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
   srcIds.forEach(function(id) {
     var n = moveNodes.find(function(x) { return x.id === id; });
-    if (n) n.parentId = newParentId;
+    if (n) {
+      // In flat views preserve each node's own parentId — we're only reordering, not reparenting
+      if (!isFlat) n.parentId = newParentId;
+    }
   });
 
   nodes.splice.apply(nodes, [insertAt, 0].concat(moveNodes));
