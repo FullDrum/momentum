@@ -464,7 +464,8 @@ function enqueue(fn) {
 }
 
 function scheduleSave(node) {
-  if (!node.name || !node.name.trim()) return;
+  if (!node || !node.id) return;
+  if (!node.name || !node.name.trim()) return; // never save nameless nodes
   pendingSave.add(node.id);
   clearTimeout(syncTimer);
   syncTimer = setTimeout(flushSave, 800);
@@ -1261,16 +1262,13 @@ function attachEvents() {
     inp.addEventListener('input', function() {
       inp.style.height = 'auto';
       inp.style.height = inp.scrollHeight + 'px';
+      var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
+      if (n) n.name = inp.value; // keep in-memory name always current
       // Smart undo: push undo checkpoint at word boundaries
       var val = inp.value;
       var lastChar = val[val.length - 1];
-      // Push undo on space (word boundary) or punctuation
       if (lastChar === ' ' || lastChar === '.' || lastChar === ',' || lastChar === '!' || lastChar === '?') {
-        var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
-        if (n && val.trim()) {
-          n.name = val; // update node name before pushing undo
-          pushUndo();
-        }
+        if (n && val.trim()) pushUndo();
       }
     });
   });
@@ -1280,31 +1278,21 @@ function attachEvents() {
       if (suppressBlur) { return; }
       var n = nodes.find(x => x.id === inp.dataset.id);
       if (!n) return;
-      // Always update name from input value on blur
-      if (inp.value.trim()) n.name = inp.value.trim();
+      // Always capture the live input value into the node
+      var live = inp.value;
+      if (live.trim()) n.name = live;
       // Switch back to display mode
       var disp = document.getElementById('disp_' + inp.dataset.id);
       switchToDisplay(inp, disp);
       if (!n.name || !n.name.trim()) {
-        // Only delete if this is a brand new node (not yet saved to sheet)
-        // A node with an order value has been saved before
         if (!n.order) {
           nodes = nodes.filter(x => x.id !== n.id);
           render();
         }
         return;
       }
-      if (recentlySaved.has(n.id)) { return; }
-      var nameToSave = inp.value;
-      var nodeId = n.id;
-      setTimeout(() => {
-        if (recentlySaved.has(nodeId)) { return; }
-        var nn = nodes.find(x => x.id === nodeId);
-        if (nn && nameToSave.trim()) {
-          nn.name = nameToSave;
-          gsr('saveNodeServer', Object.assign({}, nn)).catch(e => console.error('blur save failed:', e));
-        }
-      }, 200);
+      // Use scheduleSave so it goes through the queue and doesn't race with flushSave
+      scheduleSave(n);
     };
     inp.onfocus = () => {
       focusId = inp.dataset.id;
