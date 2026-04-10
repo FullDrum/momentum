@@ -4306,6 +4306,24 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   });
   document.getElementById('collapseBtn').onclick = collapseAll;
+
+  // Wire search bar
+  var searchInp = document.getElementById('searchInput');
+  if (searchInp) {
+    searchInp.addEventListener('input', function() { runSearch(searchInp.value); });
+    searchInp.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { clearSearch(); searchInp.blur(); }
+      if (e.key === 'Enter') { e.shiftKey ? searchPrev() : searchNext(); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); searchNext(); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); searchPrev(); }
+    });
+  }
+  var btnNext = document.getElementById('searchNext');
+  if (btnNext) btnNext.onclick = function() { searchNext(); };
+  var btnPrev = document.getElementById('searchPrev');
+  if (btnPrev) btnPrev.onclick = function() { searchPrev(); };
+  var btnClear = document.getElementById('searchClear');
+  if (btnClear) btnClear.onclick = function() { clearSearch(); if (searchInp) searchInp.focus(); };
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && opQueueDepth === 0 && pendingSave.size === 0 &&
         document.activeElement && !document.activeElement.classList.contains('node-input')) {
