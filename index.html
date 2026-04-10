@@ -1906,6 +1906,7 @@ var dragId = null;
 var dragOverId = null;
 var dropMode = null;
 var selectedIds = new Set();
+var lastSelectedId = null; // anchor for shift-click / shift-tap range selection
 var isDragging = false;
 var dragGhost = null;
 var opGeneration = 0; // incremented on undo to cancel in-flight ops
@@ -2494,18 +2495,39 @@ function initDragAndDrop() {
   var dragSelectStart = null;
   var dragSelecting = false;
 
+  var longPressTimer = null;
+  var longPressId = null;
+
   el.addEventListener('mousedown', function(e) {
     if (e.button !== 0) return;
-    // Skip buttons and interactive controls but allow node-input area
     if (e.target.closest('input[type=checkbox], button, .toggle, .drag-handle, .sel-btn, a')) return;
     var row = e.target.closest('.node-row');
     if (!row) return;
     dragSelectStart = row.dataset.id;
     dragSelecting = false;
+
+    // Long press: enter selection mode after 500ms if mouse doesn't move
+    longPressId = row.dataset.id;
+    longPressTimer = setTimeout(function() {
+      if (!dragSelecting && longPressId) {
+        if (document.activeElement && document.activeElement.classList.contains('node-input')) {
+          document.activeElement.blur();
+        }
+        selectedIds.clear();
+        selectedIds.add(longPressId);
+        selectionMode = true;
+        justLongPressed = true;
+        lastSelectedId = longPressId;
+        updateSelectionStyles();
+        dragSelectStart = null;
+      }
+    }, 500);
   });
 
   el.addEventListener('mousemove', function(e) {
     if (!dragSelectStart) return;
+    // Cancel long press if mouse moves
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     var row = e.target.closest('.node-row');
     if (!row) return;
     var endId = row.dataset.id;
@@ -2533,18 +2555,61 @@ function initDragAndDrop() {
   });
 
   document.addEventListener('mouseup', function() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressId = null;
     dragSelectStart = null;
     dragSelecting = false;
   });
 
   // Click to select
+  var justLongPressed = false;
+
   el.addEventListener('click', function(e) {
-    // Only the ○ sel-btn toggles selection — clicking row clears selection
+    // If selection mode was just entered by a long press, eat this click
+    if (justLongPressed) { justLongPressed = false; return; }
+
     var selBtn = e.target.closest('.sel-btn');
     if (selBtn) return; // handled by inline onclick
-    // Clicking anywhere else on the row clears selection
+
     var row = e.target.closest('.node-row');
-    if (row && !e.target.closest('input, button, .toggle, .drag-handle')) {
+    if (!row || e.target.closest('input, button, .toggle, .drag-handle')) return;
+
+    var id = row.dataset.id;
+    if (!id) return;
+
+    if (selectionMode) {
+      if (e.shiftKey && lastSelectedId) {
+        // Shift+click: select range between lastSelectedId and this row
+        var rows = [...el.querySelectorAll('.node-row')];
+        var anchorIdx = rows.findIndex(function(r) { return r.dataset.id === lastSelectedId; });
+        var curIdx = rows.findIndex(function(r) { return r.dataset.id === id; });
+        if (anchorIdx !== -1 && curIdx !== -1) {
+          var min = Math.min(anchorIdx, curIdx);
+          var max = Math.max(anchorIdx, curIdx);
+          for (var i = min; i <= max; i++) {
+            if (rows[i].dataset.id) selectedIds.add(rows[i].dataset.id);
+          }
+          updateSelectionStyles();
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd+click: toggle individual node
+        if (selectedIds.has(id)) {
+          selectedIds.delete(id);
+          if (selectedIds.size === 0) { selectionMode = false; lastSelectedId = null; }
+        } else {
+          selectedIds.add(id);
+        }
+        lastSelectedId = id;
+        updateSelectionStyles();
+      } else {
+        // Plain click in selection mode: clear and exit
+        selectedIds.clear();
+        selectionMode = false;
+        lastSelectedId = null;
+        updateSelectionStyles();
+      }
+    } else {
+      // Not in selection mode: plain click does nothing for selection
       if (selectedIds.size > 0) {
         selectedIds.clear();
         updateSelectionStyles();
@@ -3147,8 +3212,14 @@ function clearSelection() {
 }
 
 function toggleSelect(id) {
-  if (selectedIds.has(id)) selectedIds.delete(id);
-  else selectedIds.add(id);
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    if (selectedIds.size === 0) selectionMode = false;
+  } else {
+    selectedIds.add(id);
+    selectionMode = true;
+    lastSelectedId = id;
+  }
   updateSelectionStyles();
 }
 
