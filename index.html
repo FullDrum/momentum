@@ -1576,14 +1576,23 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Ctrl+Shift+X: promote to today ──────────────────────────
+  // ── Ctrl+Shift+X: toggle today ───────────────────────────────
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
     e.preventDefault();
     if (!cur.isSection) {
       pushUndo();
       cur.name = inp.value.trim() || cur.name;
-      cur.date = localDateTime();
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      if (cur.date && cur.date.slice(0, 10) === TODAY) {
+        // Already today — demote to yesterday
+        var yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        cur.date = yest.getFullYear() + '-' +
+          String(yest.getMonth()+1).padStart(2,'0') + '-' +
+          String(yest.getDate()).padStart(2,'0') + ' 00:00:00';
+      } else {
+        cur.date = localDateTime();
+      }
+      scheduleSave(cur);
       render();
     }
     return;
@@ -4120,17 +4129,24 @@ document.addEventListener('keydown', function(e) {
     return;
   }
 
-  // Ctrl+Shift+X: promote focused node to today
+  // Ctrl+Shift+X: toggle today on focused node
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
     e.preventDefault();
     var focusedNode = nodes.find(function(n) { return n.id === focusId; });
     if (focusedNode && !focusedNode.isSection) {
       pushUndo();
-      // Save current input value first
-      var inp = focusId ? document.getElementById('inp_' + focusId) : null;
-      if (inp && inp.value.trim()) focusedNode.name = inp.value.trim();
-      focusedNode.date = localDateTime();
-      gsr('saveNodeServer', Object.assign({}, focusedNode)).catch(function(){});
+      var inp2 = focusId ? document.getElementById('inp_' + focusId) : null;
+      if (inp2 && inp2.value.trim()) focusedNode.name = inp2.value.trim();
+      if (focusedNode.date && focusedNode.date.slice(0, 10) === TODAY) {
+        var yest2 = new Date();
+        yest2.setDate(yest2.getDate() - 1);
+        focusedNode.date = yest2.getFullYear() + '-' +
+          String(yest2.getMonth()+1).padStart(2,'0') + '-' +
+          String(yest2.getDate()).padStart(2,'0') + ' 00:00:00';
+      } else {
+        focusedNode.date = localDateTime();
+      }
+      scheduleSave(focusedNode);
       render();
     }
     return;
