@@ -4624,11 +4624,9 @@ function switchUser() {
 // Boot sequence:
 //   1. Restore the persistent save queue (unsaved work from previous session / crash)
 //   2. Verify auth via whoAmI
-//   3. Flush the restored queue FIRST (so previous-session edits go out before
-//      we overwrite local state with a fetch)
-//   4. Fetch initial data (initial=true: full replace is safe here, queue is drained)
-// No polling interval — we rely on visibilitychange for passive refresh and
-// the user refresh button for active refresh.
+//   3. Fetch initial data (full replace if queue is empty; merge otherwise)
+//   4. Flush the restored queue (runs in background, doesn't block app)
+// No polling interval — we rely on visibilitychange for passive refresh.
 function bootApp() {
   loadQueue(); // restore any unsaved work from last session
   gsr('whoAmI').then(function(r) {
@@ -4637,18 +4635,18 @@ function bootApp() {
       localStorage.setItem('momentum_user_email', r.email);
       var pill = document.getElementById('userPill');
       if (pill) pill.textContent = currentUser;
-      // Step 3: flush queue first (up to 3s) so pre-existing unsaved edits
-      // are on the server before we fetch and reconcile.
-      var flushPromise = queueIsEmpty() ? Promise.resolve(true) : flushNow(3000);
-      flushPromise.then(function() {
-        // Step 4: full initial fetch. The queue is either empty or its items
-        // will be protected by their own queueState.saves entries on reconcile.
-        fetchAll(queueIsEmpty());
+      // Step 3: fetch data. Use merge mode if we have pending saves so they survive.
+      fetchAll(queueIsEmpty()).then(function() {
+        // Step 4: kick off queue flush in background (if any). Doesn't block UI.
+        if (!queueIsEmpty()) armFlush();
+      }).catch(function(e) {
+        console.error('fetchAll error:', e && e.message);
       });
     }
   }).catch(function(e) {
-    console.error('Boot error:', e.message);
-    if (e.message === 'Not authenticated' || e.message === 'Unauthorized') {
+    console.error('Boot error:', e && e.message);
+    var msg = (e && e.message) || 'Unknown error';
+    if (msg === 'Not authenticated' || msg === 'Unauthorized') {
       // Silent refresh with retry — phase 3 auth resilience.
       silentRefreshWithRetry(3).then(function() {
         bootApp();
@@ -4661,9 +4659,13 @@ function bootApp() {
         showSignIn();
       });
     } else {
-      document.getElementById('treeEl').innerHTML =
-        '<div class="empty" style="padding:32px;">Connection error: ' + e.message +
-        '<br><br><button onclick="bootApp()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:14px;">Retry</button></div>';
+      // Network / server error. Show retry button.
+      var tree = document.getElementById('treeEl');
+      if (tree) {
+        tree.innerHTML =
+          '<div class="empty" style="padding:32px;">Connection error: ' + esc(msg) +
+          '<br><br><button onclick="bootApp()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:14px;">Retry</button></div>';
+      }
       showApp();
     }
   });
