@@ -423,6 +423,25 @@ var COLLAPSED_KEY = 'momentum_collapsed';
 var TODAY = (() => { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
 var TODAYLABEL = new Date().toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
 
+// ── Diagnostic logger ────────────────────────────────────────────────────────
+// Filter console for "MOM" to see only Momentum logs.
+function mlog() {
+  var args = Array.prototype.slice.call(arguments);
+  args.unshift('[MOM ' + new Date().toLocaleTimeString() + ']');
+  console.log.apply(console, args);
+}
+function mwarn() {
+  var args = Array.prototype.slice.call(arguments);
+  args.unshift('[MOM ' + new Date().toLocaleTimeString() + ']');
+  console.warn.apply(console, args);
+}
+function merror() {
+  var args = Array.prototype.slice.call(arguments);
+  args.unshift('[MOM ' + new Date().toLocaleTimeString() + ']');
+  console.error.apply(console, args);
+}
+mlog('Script start. document.readyState=', document.readyState, 'GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
+
 var currentUser = '';
 var nodes = [];
 var collapsed = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}');
@@ -605,24 +624,24 @@ function updateQueueBanner() {
 // force: if true, bypass the in-flight guard (used by the banner click).
 function flushBatch(force) {
   if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-  if (queueIsEmpty()) { updateQueueBanner(); return Promise.resolve(); }
-  if (batchInFlight && !force) return Promise.resolve();   // single-flight; another batch is running
+  if (queueIsEmpty()) { mlog('flushBatch: queue empty, nothing to do'); updateQueueBanner(); return Promise.resolve(); }
+  if (batchInFlight && !force) { mlog('flushBatch: in-flight, skipping'); return Promise.resolve(); }
 
-  // Snapshot the queue and clear it. If the batch fails per-item, those items
-  // are re-added; if the whole batch fails, ALL items are re-added.
   var snapSaves = Object.values(queueState.saves).map(function(n){ return Object.assign({}, n); });
   var snapDeletes = Object.keys(queueState.deletes);
+  mlog('flushBatch: starting. saves=', snapSaves.length, 'deletes=', snapDeletes.length);
   queueState.saves = {};
   queueState.deletes = {};
   persistQueue();
 
   batchInFlight = true;
-  opQueueDepth = 1; // legacy compat
+  opQueueDepth = 1;
   var thisGen = batchGeneration;
   setSyncDot('syncing');
 
   return gsr('batchOps', { saves: snapSaves, deletes: snapDeletes })
     .then(function(resp) {
+      mlog('flushBatch: response received', resp);
       batchInFlight = false;
       opQueueDepth = 0;
       // If undo happened while we were in flight, ignore this result and ship
@@ -818,10 +837,20 @@ function scheduleTokenRefresh() {
 
 // Silent token refresh — reuses the existing Google session, no popup
 function silentRefreshToken() {
-  if (_silentRefreshPromise) return _silentRefreshPromise; // already in flight
+  if (_silentRefreshPromise) { mlog('silentRefreshToken: dedup, in-flight'); return _silentRefreshPromise; }
+  mlog('silentRefreshToken: starting. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
   _silentRefreshPromise = new Promise(function(resolve, reject) {
     try {
       var hint = localStorage.getItem('momentum_user_email') || '';
+      mlog('silentRefreshToken: hint=', hint);
+      if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+        var ge = new Error('GSI not loaded');
+        ge.fatal = false;
+        _silentRefreshPromise = null;
+        merror('silentRefreshToken: GSI library not available');
+        reject(ge);
+        return;
+      }
       var client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile',
@@ -829,13 +858,13 @@ function silentRefreshToken() {
         login_hint: hint,     // skip account chooser
         callback: function(response) {
           _silentRefreshPromise = null;
+          mlog('silentRefreshToken: callback. error=', response.error || 'none', 'has token?', !!response.access_token);
           if (response.error) {
-            // interaction_required / consent_required = Google wants user action (fatal)
-            // access_denied / other = retry candidates
             var err = new Error(response.error);
             err.fatal = (response.error === 'interaction_required' ||
                          response.error === 'consent_required' ||
                          response.error === 'login_required');
+            mwarn('silentRefreshToken: rejected', response.error, 'fatal=', err.fatal);
             reject(err);
             return;
           }
@@ -844,11 +873,16 @@ function silentRefreshToken() {
           localStorage.setItem('momentum_access_token', _googleAccessToken);
           localStorage.setItem('momentum_token_expiry', _tokenExpiry);
           scheduleTokenRefresh();
+          mlog('silentRefreshToken: resolved with new token, expires in', response.expires_in, 's');
           resolve();
         }
       });
       client.requestAccessToken();
-    } catch(e) { _silentRefreshPromise = null; reject(e); }
+    } catch(e) {
+      _silentRefreshPromise = null;
+      merror('silentRefreshToken: threw', e && e.message);
+      reject(e);
+    }
   });
   return _silentRefreshPromise;
 }
@@ -860,14 +894,17 @@ function silentRefreshWithRetry(attempts) {
   attempts = attempts || 3;
   var delays = [0, 500, 2000, 5000];
   var attempt = 0;
+  mlog('silentRefreshWithRetry: starting, max attempts=', attempts);
   return new Promise(function(resolve, reject) {
     function tryOnce() {
+      mlog('silentRefreshWithRetry: attempt', attempt + 1, 'of', attempts);
       silentRefreshToken()
-        .then(resolve)
+        .then(function() { mlog('silentRefreshWithRetry: success'); resolve(); })
         .catch(function(e) {
           attempt++;
-          if (e && e.fatal) { reject(e); return; }         // user action needed
-          if (attempt >= attempts) { reject(e); return; }   // exhausted retries
+          mwarn('silentRefreshWithRetry: attempt', attempt, 'failed:', e && e.message, 'fatal=', e && e.fatal);
+          if (e && e.fatal) { mwarn('silentRefreshWithRetry: aborting (fatal)'); reject(e); return; }
+          if (attempt >= attempts) { mwarn('silentRefreshWithRetry: exhausted'); reject(e); return; }
           setTimeout(tryOnce, delays[attempt] || 5000);
         });
     }
@@ -876,11 +913,19 @@ function silentRefreshWithRetry(attempts) {
 }
 
 function signInWithGoogle() {
+  mlog('signInWithGoogle: invoked. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    merror('signInWithGoogle: GSI not loaded yet, retrying in 500ms');
+    setTimeout(signInWithGoogle, 500);
+    return;
+  }
   var client = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: 'email profile',
     callback: function(response) {
+      mlog('signInWithGoogle: callback. error=', response.error || 'none', 'has token?', !!response.access_token);
       if (response.error) {
+        merror('signInWithGoogle: error', response.error);
         alert('Sign-in error: ' + response.error);
         return;
       }
@@ -889,10 +934,12 @@ function signInWithGoogle() {
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
       scheduleTokenRefresh();
+      mlog('signInWithGoogle: token persisted, calling showApp + bootApp');
       showApp();
       bootApp();
     }
   });
+  mlog('signInWithGoogle: requesting access token');
   client.requestAccessToken();
 }
 
@@ -930,13 +977,15 @@ function showApp() {
 // ── API call — replaces google.script.run ─────────────────────────────────────
 function gsr(fnName, arg) {
   return new Promise(function(resolve, reject) {
-    if (!isTokenValid()) {
+    var valid = isTokenValid();
+    mlog('gsr:', fnName, 'tokenValid?', valid, 'token?', !!_googleAccessToken);
+    if (!valid) {
+      mlog('gsr:', fnName, '→ token invalid, attempting silent refresh');
       silentRefreshWithRetry(3).then(function() {
-        // Retry the call with the fresh token
+        mlog('gsr:', fnName, '→ silent refresh succeeded, retrying call');
         gsr(fnName, arg).then(resolve).catch(reject);
       }).catch(function(e) {
-        // Only show sign-in for fatal errors (user action required).
-        // Transient errors: surface to caller, which lets the batch retry.
+        mwarn('gsr:', fnName, '→ silent refresh failed:', e && e.message, 'fatal=', e && e.fatal);
         if (e && e.fatal) {
           handleAuthFailure();
           reject(new Error('Not authenticated'));
@@ -946,8 +995,7 @@ function gsr(fnName, arg) {
       });
       return;
     }
-    // Apps Script requires text/plain to avoid CORS preflight
-    // Also needs redirect:follow because Apps Script redirects to the actual endpoint
+    mlog('gsr:', fnName, '→ POST to', APPS_SCRIPT_URL.slice(-30));
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       redirect: 'follow',
@@ -960,21 +1008,23 @@ function gsr(fnName, arg) {
       })
     })
     .then(function(r) {
+      mlog('gsr:', fnName, '→ HTTP', r.status, r.ok ? 'OK' : 'NOT OK');
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.text(); // get as text first to handle non-JSON errors
+      return r.text();
     })
     .then(function(text) {
+      mlog('gsr:', fnName, '→ response body length', text.length, 'preview:', text.slice(0, 80));
       var data;
       try { data = JSON.parse(text); } catch(e) {
         console.error('Non-JSON response:', text.slice(0, 200));
         throw new Error('Server returned non-JSON response');
       }
       if (data && data.error === 'Unauthorized') {
-        // Don't immediately force login — try silent refresh first, retry the call.
-        // This masks transient Apps Script / userinfo-endpoint hiccups.
+        mwarn('gsr:', fnName, '→ server says Unauthorized, trying silent refresh + retry');
         silentRefreshWithRetry(3).then(function() {
           gsr(fnName, arg).then(resolve).catch(reject);
         }).catch(function(e) {
+          mwarn('gsr:', fnName, '→ refresh after Unauthorized failed:', e && e.message);
           if (e && e.fatal) {
             handleAuthFailure();
             reject(new Error('Unauthorized'));
@@ -984,11 +1034,12 @@ function gsr(fnName, arg) {
         });
         return;
       }
-      if (data && data.error) { reject(new Error(data.error)); return; }
+      if (data && data.error) { mwarn('gsr:', fnName, '→ server error:', data.error); reject(new Error(data.error)); return; }
+      mlog('gsr:', fnName, '→ success');
       resolve(data);
     })
     .catch(function(err) {
-      console.error('gsr error:', fnName, err.message);
+      merror('gsr:', fnName, '→ FETCH FAILED:', err && err.message, err);
       reject(err);
     });
   });
@@ -4628,38 +4679,43 @@ function switchUser() {
 //   4. Flush the restored queue (runs in background, doesn't block app)
 // No polling interval — we rely on visibilitychange for passive refresh.
 function bootApp() {
-  loadQueue(); // restore any unsaved work from last session
+  mlog('bootApp: invoked. token valid?', isTokenValid());
+  loadQueue();
+  mlog('bootApp: queue loaded. size=', queueSize());
   gsr('whoAmI').then(function(r) {
+    mlog('bootApp: whoAmI result=', r);
     if (r && r.email) {
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
       var pill = document.getElementById('userPill');
       if (pill) pill.textContent = currentUser;
-      // Step 3: fetch data. Use merge mode if we have pending saves so they survive.
+      mlog('bootApp: about to fetchAll(initial=', queueIsEmpty(), ')');
       fetchAll(queueIsEmpty()).then(function() {
-        // Step 4: kick off queue flush in background (if any). Doesn't block UI.
+        mlog('bootApp: fetchAll completed. queueSize=', queueSize());
         if (!queueIsEmpty()) armFlush();
       }).catch(function(e) {
-        console.error('fetchAll error:', e && e.message);
+        merror('bootApp: fetchAll failed:', e && e.message);
       });
+    } else {
+      mwarn('bootApp: whoAmI returned no email');
     }
   }).catch(function(e) {
-    console.error('Boot error:', e && e.message);
+    merror('bootApp: whoAmI failed:', e && e.message);
     var msg = (e && e.message) || 'Unknown error';
     if (msg === 'Not authenticated' || msg === 'Unauthorized') {
-      // Silent refresh with retry — phase 3 auth resilience.
+      mlog('bootApp: trying silent refresh + retry');
       silentRefreshWithRetry(3).then(function() {
+        mlog('bootApp: refresh worked, calling bootApp again');
         bootApp();
-      }).catch(function() {
-        // Genuine auth failure. Don't wipe the queue — it stays in localStorage
-        // and will flush after next login. Just show the sign-in screen.
+      }).catch(function(re) {
+        mwarn('bootApp: refresh failed (', re && re.message, '), going to sign-in');
         localStorage.removeItem('momentum_access_token');
         localStorage.removeItem('momentum_token_expiry');
         _googleAccessToken = null;
         showSignIn();
       });
     } else {
-      // Network / server error. Show retry button.
+      mwarn('bootApp: showing connection error UI for:', msg);
       var tree = document.getElementById('treeEl');
       if (tree) {
         tree.innerHTML =
@@ -4752,23 +4808,44 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('pagehide', function() {
     if (!queueIsEmpty() && !batchInFlight) flushBatch();
   });
-  // Boot: check for valid token, or try silent refresh
-  if (isTokenValid()) {
-    scheduleTokenRefresh();
-    showApp();
-    bootApp();
-  } else {
-    // Token missing or expired — try to silently get a fresh one before
-    // forcing the user to click Sign In again
-    silentRefreshToken().then(function() {
+  // Boot: check for valid token, or try silent refresh.
+  // Wait for GSI to be loaded before deciding — silent refresh needs it.
+  function gsiReady() {
+    return typeof google !== 'undefined' && google.accounts && google.accounts.oauth2;
+  }
+  function bootDecision() {
+    var v = isTokenValid();
+    var stored = !!_googleAccessToken;
+    var expiry = _tokenExpiry ? new Date(_tokenExpiry).toLocaleTimeString() : 'none';
+    mlog('bootDecision: tokenValid=', v, 'storedToken=', stored, 'expiry=', expiry, 'GSI ready=', gsiReady());
+    if (v) {
+      mlog('bootDecision: token valid, going straight to bootApp');
+      scheduleTokenRefresh();
       showApp();
       bootApp();
-    }).catch(function() {
-      showSignIn();
-      localStorage.removeItem('momentum_access_token');
-      localStorage.removeItem('momentum_token_expiry');
-    });
+    } else {
+      mlog('bootDecision: no valid token, attempting silent refresh');
+      silentRefreshToken().then(function() {
+        mlog('bootDecision: silent refresh succeeded → showApp + bootApp');
+        showApp();
+        bootApp();
+      }).catch(function(e) {
+        mwarn('bootDecision: silent refresh failed:', e && e.message, '→ showSignIn');
+        showSignIn();
+        localStorage.removeItem('momentum_access_token');
+        localStorage.removeItem('momentum_token_expiry');
+      });
+    }
   }
+  // Wait up to 3 seconds for GSI to load before booting
+  var waited = 0;
+  function waitForGSI() {
+    if (gsiReady()) { mlog('GSI loaded after', waited, 'ms'); bootDecision(); return; }
+    if (waited > 3000) { mwarn('GSI did not load within 3s, booting anyway'); bootDecision(); return; }
+    waited += 100;
+    setTimeout(waitForGSI, 100);
+  }
+  waitForGSI();
 });
 
 
