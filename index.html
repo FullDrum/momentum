@@ -428,8 +428,6 @@ var nodes = [];
 var collapsed = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}');
 var activeTab = 'today';
 var focusId = null;
-var syncTimer = null;
-var pendingSave = new Set();
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 function newId() { return '_' + Math.random().toString(36).substr(2, 7); }
@@ -445,30 +443,117 @@ function localDateTime() {
 }
 function saveCollapsed() { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed)); }
 
-// ── Serial Operation Queue ─────────────────────────────────────────────────────
-// ALL server ops (saves + deletes) go through this queue in order, never concurrent
-var opQueue = Promise.resolve();
-var opQueueDepth = 0; // count of pending queue operations
-var syncTimer = null;
-var suppressBlur = false;
-var recentlySaved = new Set();
+// ═════════════════════════════════════════════════════════════════════════════
+// LOCAL-FIRST SYNC ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+// Design:
+//   - Local state (nodes[]) is the source of truth.
+//   - All mutations go into queueState (saves Map + deletes Set), persisted to
+//     localStorage on every change. Survives reloads, crashes, re-logins.
+//   - Background flush sends one batched HTTP request every ~1500ms.
+//   - Only one batch in flight at a time (single-flight). Subsequent mutations
+//     queue up and ship in the next batch.
+//   - On batch failure: per-item failures are re-queued. Whole-request failures
+//     trigger exponential backoff (1.5s → 3s → 6s → 12s, capped at 30s).
+//   - nodeTouched[id] = timestamp of last user mutation. Reconcile uses this
+//     to refuse server overwrites of recently-edited nodes (5s window).
+//   - opGeneration cancels in-flight batches whose results would clobber the
+//     state after an undo.
+// ═════════════════════════════════════════════════════════════════════════════
 
-function enqueue(fn) {
-  opQueueDepth++;
-  opQueue = opQueue.then(fn).catch(function(e) {
-    console.error('Queue op failed:', e);
-  }).finally(function() {
-    opQueueDepth--;
-  });
-  return opQueue;
+var QUEUE_KEY = 'momentum_pending_queue';
+var TOUCHED_WINDOW_MS = 5000;       // reconciliation window — local edits younger than this beat server
+var FLUSH_DEBOUNCE_MS = 1500;       // wait this long after a mutation before flushing
+var BACKOFF_BASE_MS = 1500;         // initial backoff after a failed batch
+var BACKOFF_MAX_MS = 30000;         // cap
+
+// State
+var queueState = { saves: {}, deletes: {} };  // saves: id → snapshot, deletes: id → true
+var nodeTouched = {};                          // id → timestamp ms
+var flushTimer = null;
+var batchInFlight = false;
+var batchBackoffMs = BACKOFF_BASE_MS;
+var batchGeneration = 0;                       // bumped on undo/redo to invalidate in-flight batches
+var suppressBlur = false;                      // legacy: blocks blur saves during render rebuilds
+var recentlySaved = new Set();                 // legacy: kept for code that references it; harmless
+
+// Legacy aliases — many call sites still use these names. They now point at the
+// new system so old code keeps working without churn.
+var pendingSave = {
+  add: function(id) { var n = nodes.find(function(x){return x.id===id;}); if (n) queueSave(n); },
+  has: function(id) { return !!queueState.saves[id]; },
+  delete: function(id) { delete queueState.saves[id]; persistQueue(); },
+  clear: function() { queueState.saves = {}; persistQueue(); },
+  forEach: function(cb) { Object.keys(queueState.saves).forEach(cb); },
+  get size() { return Object.keys(queueState.saves).length; }
+};
+var opGeneration = 0;                          // legacy alias kept in sync with batchGeneration
+var opQueueDepth = 0;                          // legacy: 0 when no batch in flight, 1 when in flight
+var syncTimer = null;                          // legacy: kept null; flushTimer replaces it
+
+function loadQueue() {
+  try {
+    var raw = localStorage.getItem(QUEUE_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        queueState.saves = parsed.saves || {};
+        queueState.deletes = parsed.deletes || {};
+      }
+    }
+  } catch(e) { console.warn('Could not load queue from localStorage:', e); }
+}
+function persistQueue() {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queueState)); }
+  catch(e) { console.warn('Could not persist queue:', e); }
+}
+function queueIsEmpty() {
+  return Object.keys(queueState.saves).length === 0 &&
+         Object.keys(queueState.deletes).length === 0;
+}
+function queueSize() {
+  return Object.keys(queueState.saves).length + Object.keys(queueState.deletes).length;
 }
 
-function scheduleSave(node) {
+// Update touched timestamp for a node — call this from any keystroke or mutation.
+function touchNode(id) { nodeTouched[id] = Date.now(); }
+
+// Schedule a save: store snapshot in queue, mark touched, arm the flush timer.
+// Replaces any earlier pending save for the same id (last-write-wins locally).
+function queueSave(node) {
   if (!node || !node.id) return;
-  if (!node.name || !node.name.trim()) return; // never save nameless nodes
-  pendingSave.add(node.id);
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(flushSave, 800);
+  if (!node.name || !node.name.trim()) return;     // never save nameless nodes
+  // If this id is queued for delete, the delete wins — saves on a deleted id
+  // would resurrect it. Skip the save.
+  if (queueState.deletes[node.id]) return;
+  queueState.saves[node.id] = Object.assign({}, node);
+  touchNode(node.id);
+  persistQueue();
+  armFlush();
+}
+
+function queueDelete(id) {
+  if (!id) return;
+  // Cancel any pending save for this id
+  delete queueState.saves[id];
+  queueState.deletes[id] = true;
+  touchNode(id);
+  persistQueue();
+  armFlush();
+}
+
+function armFlush() {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(flushBatch, FLUSH_DEBOUNCE_MS);
+}
+
+// Public alias matching the old API. Many call sites do scheduleSave(n).
+function scheduleSave(node) { queueSave(node); }
+
+// Public alias for deletes. Matches old deleteRemote(id, snapIds) signature.
+function deleteRemote(id, snapIds) {
+  var ids = snapIds || (id ? [id] : []);
+  ids.forEach(function(d) { queueDelete(d); });
 }
 
 function setSyncDot(state) {
@@ -476,7 +561,6 @@ function setSyncDot(state) {
   if (!avatar) return;
   var colors = { syncing: '#f0a500', ok: '#3aaa6e', err: '#e24b4a' };
   avatar.style.background = colors[state] || 'var(--accent)';
-  // Reset to accent after ok
   if (state === 'ok') {
     setTimeout(function() {
       var a = document.getElementById('userAvatar');
@@ -485,59 +569,152 @@ function setSyncDot(state) {
   }
 }
 
-function flushSave() {
-  syncTimer = null; // reset so the 30s interval can fire again
-  if (!pendingSave.size) return;
-  var ids = [...pendingSave];
-  pendingSave.clear();
-  var toSave = nodes.filter(function(n) {
-    return ids.indexOf(n.id) > -1 && n.name && n.name.trim();
-  }).map(function(n) { return Object.assign({}, n); }); // snapshot now
-  var gen = opGeneration;
-  toSave.forEach(function(snap) {
-    enqueue(function() {
-      if (opGeneration !== gen) return Promise.resolve();
-      setSyncDot('syncing');
-      return gsr('saveNodeServer', snap)
-        .then(function() { setSyncDot('ok'); })
-        .catch(function(e) {
-          setSyncDot('err');
-          console.error('Save failed:', snap.id, e);
-          pendingSave.add(snap.id); // mark for retry
-          // Re-arm the flush timer so the retry actually goes out
-          clearTimeout(syncTimer);
-          syncTimer = setTimeout(flushSave, 4000); // 4s back-off
+// Update the unsaved-changes banner. Shown when queue is non-empty for >5s.
+var queueBannerTimer = null;
+function updateQueueBanner() {
+  // Built lazily on first non-empty queue
+  var b = document.getElementById('queueBanner');
+  var size = queueSize();
+  if (size === 0) {
+    if (b) b.style.display = 'none';
+    if (queueBannerTimer) { clearTimeout(queueBannerTimer); queueBannerTimer = null; }
+    return;
+  }
+  // Don't flash for normal short flushes — only show after a delay
+  if (!queueBannerTimer) {
+    queueBannerTimer = setTimeout(function() {
+      queueBannerTimer = null;
+      var sz = queueSize();
+      if (sz === 0) return;
+      var el = document.getElementById('queueBanner');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'queueBanner';
+        el.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:#f0a500;color:#000;padding:6px 14px;border-radius:8px;font-size:12px;z-index:5000;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;';
+        el.title = 'Click to retry now';
+        el.onclick = function() { flushBatch(true); };
+        document.body.appendChild(el);
+      }
+      el.textContent = sz + ' unsaved change' + (sz === 1 ? '' : 's') + ' — syncing…';
+      el.style.display = 'block';
+    }, 5000);
+  }
+}
+
+// Flush the current queue as one batched request.
+// force: if true, bypass the in-flight guard (used by the banner click).
+function flushBatch(force) {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (queueIsEmpty()) { updateQueueBanner(); return Promise.resolve(); }
+  if (batchInFlight && !force) return Promise.resolve();   // single-flight; another batch is running
+
+  // Snapshot the queue and clear it. If the batch fails per-item, those items
+  // are re-added; if the whole batch fails, ALL items are re-added.
+  var snapSaves = Object.values(queueState.saves).map(function(n){ return Object.assign({}, n); });
+  var snapDeletes = Object.keys(queueState.deletes);
+  queueState.saves = {};
+  queueState.deletes = {};
+  persistQueue();
+
+  batchInFlight = true;
+  opQueueDepth = 1; // legacy compat
+  var thisGen = batchGeneration;
+  setSyncDot('syncing');
+
+  return gsr('batchOps', { saves: snapSaves, deletes: snapDeletes })
+    .then(function(resp) {
+      batchInFlight = false;
+      opQueueDepth = 0;
+      // If undo happened while we were in flight, ignore this result and ship
+      // a fresh batch built from the post-undo state.
+      if (thisGen !== batchGeneration) {
+        if (!queueIsEmpty()) armFlush();
+        return;
+      }
+      if (resp && resp.results) {
+        // Re-queue any per-item failures
+        (resp.results.saves || []).forEach(function(r) {
+          if (r && r.error) {
+            console.warn('Save error for', r.id, ':', r.error);
+            // Permission errors (someone else owns it) shouldn't loop forever.
+            // Drop and surface to console; the user can refresh to see truth.
+            if (r.error === 'Permission denied') return;
+            // Re-queue with the latest snapshot from local nodes (in case the
+            // user touched it again while the batch was in flight)
+            var n = nodes.find(function(x){ return x.id === r.id; });
+            if (n) queueState.saves[r.id] = Object.assign({}, n);
+          }
         });
-    });
-  });
-}
-
-function deleteRemote(id, snapIds) {
-  // snapIds: array of ids to delete, captured at deletion time
-  var ids = snapIds || (id ? [id] : []);
-  if (!ids.length) return;
-  var gen = opGeneration;
-  // Single queue entry for all ids - one server call
-  enqueue(function() {
-    if (opGeneration !== gen) return Promise.resolve();
-    setSyncDot('syncing');
-    return gsr('deleteNodesServer', ids)
-      .then(function() { setSyncDot('ok'); })
-      .catch(function(e) {
-        setSyncDot('err');
-        console.error('Bulk delete failed:', e);
-        // Fallback: try individual deletes
-        return ids.reduce(function(p, did) {
-          return p.then(function() {
-            if (opGeneration !== gen) return;
-            return gsr('deleteNodeServer', did).catch(function(){});
-          });
-        }, Promise.resolve());
+        (resp.results.deletes || []).forEach(function(r) {
+          if (r && r.error) {
+            console.warn('Delete error for', r.id, ':', r.error);
+            queueState.deletes[r.id] = true;
+          }
+        });
+        persistQueue();
+      }
+      // Reset backoff on success
+      batchBackoffMs = BACKOFF_BASE_MS;
+      setSyncDot('ok');
+      // Anything queued during the flight? Schedule another batch.
+      if (!queueIsEmpty()) armFlush();
+      else updateQueueBanner();
+    })
+    .catch(function(e) {
+      batchInFlight = false;
+      opQueueDepth = 0;
+      console.error('Batch failed:', e && e.message);
+      setSyncDot('err');
+      // Re-queue everything we just tried
+      snapSaves.forEach(function(n) {
+        // Prefer the latest local copy (user may have typed more) over our snapshot
+        var live = nodes.find(function(x){ return x.id === n.id; });
+        queueState.saves[n.id] = live ? Object.assign({}, live) : n;
       });
+      snapDeletes.forEach(function(id) { queueState.deletes[id] = true; });
+      persistQueue();
+      updateQueueBanner();
+      // Exponential backoff
+      var delay = batchBackoffMs;
+      batchBackoffMs = Math.min(batchBackoffMs * 2, BACKOFF_MAX_MS);
+      flushTimer = setTimeout(flushBatch, delay);
+    });
+}
+
+// Public: flush everything synchronously (well, as fast as possible) — used
+// before showing login screen so unsaved work makes it to the server.
+// Returns a promise that resolves when queue is empty or after timeoutMs.
+function flushNow(timeoutMs) {
+  timeoutMs = timeoutMs || 3000;
+  return new Promise(function(resolve) {
+    var deadline = Date.now() + timeoutMs;
+    function tick() {
+      if (queueIsEmpty()) { resolve(true); return; }
+      if (Date.now() >= deadline) { resolve(false); return; }
+      if (!batchInFlight) flushBatch();
+      setTimeout(tick, 200);
+    }
+    tick();
   });
 }
 
-async function fetchAll() {
+// Bump generation: cancel any in-flight batch's effect on the queue.
+// Call from undo/redo before mutating state.
+function bumpGeneration() {
+  batchGeneration++;
+  opGeneration = batchGeneration; // legacy alias
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// END SYNC ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Fetch server state and reconcile with local. Does NOT clobber:
+//   - Nodes with pending saves or deletes in the queue
+//   - Nodes touched (by user input) within the last TOUCHED_WINDOW_MS
+//   - The node currently being edited in an active textarea
+// initial: true on app boot (we have no local state to protect, so full replace)
+async function fetchAll(initial) {
   var clientEmail = localStorage.getItem('momentum_user_email') || currentUser || '';
   var data = await gsr('getInitialData', clientEmail || null);
   if (!data) return;
@@ -553,43 +730,63 @@ async function fetchAll() {
     avatar.style.background = 'var(--accent)';
     avatar.title = currentUser + ' — click to sign out';
   }
-  // Don't overwrite active input - save it first
-  var activeInp = document.activeElement;
-  var activeId = null;
-  var activeVal = null;
-  if (activeInp && activeInp.classList.contains('node-input') && activeInp.value.trim()) {
-    activeId = activeInp.dataset.id;
-    activeVal = activeInp.value.trim();
-  }
-  // Snapshot local state of any nodes waiting to be saved, before the server
-  // data overwrites them. These IDs are in pendingSave but haven't flushed yet.
-  var pendingSnapshots = {};
-  pendingSave.forEach(function(id) {
-    var n = nodes.find(function(x) { return x.id === id; });
-    if (n) pendingSnapshots[id] = Object.assign({}, n);
-  });
 
-  nodes = normalizeNodes(data.nodes || []);
-
-  // Re-apply local pending state so optimistic UI changes aren't lost
-  if (Object.keys(pendingSnapshots).length > 0) {
-    nodes.forEach(function(n, i) {
-      if (pendingSnapshots[n.id]) nodes[i] = Object.assign({}, n, pendingSnapshots[n.id]);
-    });
-  }
-  // Also load team members
+  var serverNodes = normalizeNodes(data.nodes || []);
   gsr('getTeamMembers').then(function(members) { teamMembers = members || []; }).catch(function(){});
-  // Restore unsaved content into the refreshed node
-  if (activeId && activeVal) {
-    var n = nodes.find(function(x) { return x.id === activeId; });
-    if (n) n.name = activeVal;
-    // Save it to sheet since we have it
-    gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+
+  if (initial) {
+    // Fresh boot — no local state worth preserving. Just load server state.
+    nodes = serverNodes;
+  } else {
+    // Reconcile: merge server state with protected local state.
+    var now = Date.now();
+    var localById = {};
+    nodes.forEach(function(n) { localById[n.id] = n; });
+    var serverById = {};
+    serverNodes.forEach(function(n) { serverById[n.id] = n; });
+
+    var merged = [];
+
+    // For every server node: decide whether to take server or keep local
+    serverNodes.forEach(function(sn) {
+      var local = localById[sn.id];
+      if (!local) {
+        // New on server, not yet known locally — take it (unless it's queued for delete)
+        if (!queueState.deletes[sn.id]) merged.push(sn);
+        return;
+      }
+      var protectLocal =
+        !!queueState.saves[sn.id] ||
+        (nodeTouched[sn.id] && (now - nodeTouched[sn.id]) < TOUCHED_WINDOW_MS) ||
+        (document.activeElement && document.activeElement.classList &&
+         document.activeElement.classList.contains('node-input') &&
+         document.activeElement.dataset && document.activeElement.dataset.id === sn.id);
+      if (protectLocal) merged.push(local);
+      else merged.push(sn);
+    });
+
+    // Also include any local-only nodes that aren't on the server yet
+    // (newly-created, not-yet-saved nodes) — unless they're queued for delete
+    nodes.forEach(function(ln) {
+      if (!serverById[ln.id] && !queueState.deletes[ln.id]) {
+        // But NOT if the server just deleted it and enough time has passed
+        // (i.e. no recent touch and no pending save). In that case drop it.
+        var recentlyTouched = nodeTouched[ln.id] && (now - nodeTouched[ln.id]) < TOUCHED_WINDOW_MS;
+        var isPending = !!queueState.saves[ln.id];
+        if (recentlyTouched || isPending || ln.id.indexOf('_') === 0) {
+          // _-prefix means it's a fresh client-generated id that hasn't been saved yet
+          merged.push(ln);
+        }
+      }
+    });
+
+    nodes = merged;
   }
+
   var hasUnowned = nodes.some(function(n) { return !n.owner || !n.owner.trim(); });
   var claimBtn = document.getElementById('claimBtn');
   if (claimBtn) claimBtn.style.display = (hasUnowned && currentUser) ? 'inline-block' : 'none';
-  render();
+  render(!initial); // preserve scroll on reconciliation fetches
 }
 
 // ── PWA Config — fill these in ───────────────────────────────────────────────
@@ -633,9 +830,13 @@ function silentRefreshToken() {
         callback: function(response) {
           _silentRefreshPromise = null;
           if (response.error) {
-            // interaction_required / consent_required = Google wants user action
-            // access_denied / other = genuine failure
-            reject(new Error(response.error));
+            // interaction_required / consent_required = Google wants user action (fatal)
+            // access_denied / other = retry candidates
+            var err = new Error(response.error);
+            err.fatal = (response.error === 'interaction_required' ||
+                         response.error === 'consent_required' ||
+                         response.error === 'login_required');
+            reject(err);
             return;
           }
           _googleAccessToken = response.access_token;
@@ -650,6 +851,28 @@ function silentRefreshToken() {
     } catch(e) { _silentRefreshPromise = null; reject(e); }
   });
   return _silentRefreshPromise;
+}
+
+// Retry silent refresh up to `attempts` times with exponential backoff.
+// Fatal errors (interaction_required) short-circuit immediately.
+// Transient errors (network, service down) retry with 500ms, 2s, 5s delays.
+function silentRefreshWithRetry(attempts) {
+  attempts = attempts || 3;
+  var delays = [0, 500, 2000, 5000];
+  var attempt = 0;
+  return new Promise(function(resolve, reject) {
+    function tryOnce() {
+      silentRefreshToken()
+        .then(resolve)
+        .catch(function(e) {
+          attempt++;
+          if (e && e.fatal) { reject(e); return; }         // user action needed
+          if (attempt >= attempts) { reject(e); return; }   // exhausted retries
+          setTimeout(tryOnce, delays[attempt] || 5000);
+        });
+    }
+    tryOnce();
+  });
 }
 
 function signInWithGoogle() {
@@ -674,12 +897,20 @@ function signInWithGoogle() {
 }
 
 function signOut() {
-  google.accounts.oauth2.revoke(_googleAccessToken, function() {});
-  _googleAccessToken = null;
-  localStorage.removeItem('momentum_access_token');
-  localStorage.removeItem('momentum_token_expiry');
-  localStorage.removeItem('momentum_user_email');
-  showSignIn();
+  // Flush unsaved work before revoking the token (3s timeout).
+  // Queue persists in localStorage either way, but we may as well try.
+  var done = function() {
+    if (_googleAccessToken) {
+      google.accounts.oauth2.revoke(_googleAccessToken, function() {});
+    }
+    _googleAccessToken = null;
+    localStorage.removeItem('momentum_access_token');
+    localStorage.removeItem('momentum_token_expiry');
+    localStorage.removeItem('momentum_user_email');
+    showSignIn();
+  };
+  if (queueIsEmpty()) { done(); }
+  else { flushNow(3000).then(done); }
 }
 
 function showSignIn() {
@@ -700,12 +931,18 @@ function showApp() {
 function gsr(fnName, arg) {
   return new Promise(function(resolve, reject) {
     if (!isTokenValid()) {
-      silentRefreshToken().then(function() {
+      silentRefreshWithRetry(3).then(function() {
         // Retry the call with the fresh token
         gsr(fnName, arg).then(resolve).catch(reject);
-      }).catch(function() {
-        showSignIn();
-        reject(new Error('Not authenticated'));
+      }).catch(function(e) {
+        // Only show sign-in for fatal errors (user action required).
+        // Transient errors: surface to caller, which lets the batch retry.
+        if (e && e.fatal) {
+          handleAuthFailure();
+          reject(new Error('Not authenticated'));
+        } else {
+          reject(e || new Error('Auth refresh failed'));
+        }
       });
       return;
     }
@@ -733,10 +970,18 @@ function gsr(fnName, arg) {
         throw new Error('Server returned non-JSON response');
       }
       if (data && data.error === 'Unauthorized') {
-        showSignIn();
-        var errEl = document.getElementById('signinError');
-        if (errEl) errEl.style.display = 'block';
-        reject(new Error('Unauthorized'));
+        // Don't immediately force login — try silent refresh first, retry the call.
+        // This masks transient Apps Script / userinfo-endpoint hiccups.
+        silentRefreshWithRetry(3).then(function() {
+          gsr(fnName, arg).then(resolve).catch(reject);
+        }).catch(function(e) {
+          if (e && e.fatal) {
+            handleAuthFailure();
+            reject(new Error('Unauthorized'));
+          } else {
+            reject(new Error('Unauthorized'));
+          }
+        });
         return;
       }
       if (data && data.error) { reject(new Error(data.error)); return; }
@@ -747,6 +992,22 @@ function gsr(fnName, arg) {
       reject(err);
     });
   });
+}
+
+// Called when auth fails fatally (user action required).
+// Try to get pending work to the server before showing login — our batch
+// persists across logins in localStorage anyway, but every second of delay
+// matters because the user might close the tab.
+function handleAuthFailure() {
+  var errEl = document.getElementById('signinError');
+  if (errEl && queueSize() > 0) {
+    errEl.textContent = queueSize() + ' unsaved change' + (queueSize() === 1 ? '' : 's') +
+      ' — please sign in to save.';
+    errEl.style.display = 'block';
+  } else if (errEl) {
+    errEl.style.display = 'block';
+  }
+  showSignIn();
 }
 
 
@@ -1106,7 +1367,7 @@ function attachEvents() {
         var n = nodes.find(x => x.id === active.dataset.id);
         if (n && active.value.trim()) {
           n.name = active.value.trim();
-          gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+          scheduleSave(n);
         }
       }
     };
@@ -1149,7 +1410,7 @@ function attachEvents() {
       n.isSection = !n.isSection;
       if (!n.isSection && !n.date) n.date = localDateTime();
       focusId = n.id;
-      gsr('saveNodeServer', Object.assign({}, n)).catch(function(e) { console.error('save error', e); });
+      scheduleSave(n);
       render();
     }
   });
@@ -1263,7 +1524,10 @@ function attachEvents() {
       inp.style.height = 'auto';
       inp.style.height = inp.scrollHeight + 'px';
       var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
-      if (n) n.name = inp.value; // keep in-memory name always current
+      if (n) {
+        n.name = inp.value; // keep in-memory name always current
+        touchNode(n.id);    // protect from reconcile clobber
+      }
       // Smart undo: push undo checkpoint at word boundaries
       var val = inp.value;
       var lastChar = val[val.length - 1];
@@ -1344,7 +1608,7 @@ function handleKey(e, inp) {
     e.preventDefault();
     cur.name = inp.value;
     if (cur.name.trim()) {
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      scheduleSave(cur);
     }
     showCombinedPicker(cur);
     return;
@@ -1354,7 +1618,7 @@ function handleKey(e, inp) {
   if (e.key === 'Enter' && !e.shiftKey && e.altKey) {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+    if (cur.name.trim()) scheduleSave(cur);
     // Find or use first section named "General" (case-insensitive)
     var generalSection = nodes.find(function(n) {
       return n.isSection && n.name && n.name.toLowerCase().trim() === 'general';
@@ -1375,7 +1639,7 @@ function handleKey(e, inp) {
     pushUndo();
     cur.name = inp.value;
     if (cur.name.trim()) {
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      scheduleSave(cur);
     }
     var si = nodes.findIndex(x => x.id === id);
     var ownDesc = descendants(id);
@@ -1422,7 +1686,7 @@ function handleKey(e, inp) {
     pushUndo();
     cur.name = inp.value;
     if (cur.name.trim()) {
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      scheduleSave(cur);
     }
     var si = nodes.findIndex(x => x.id === id);
     var ownDesc = descendants(id);
@@ -1451,7 +1715,7 @@ function handleKey(e, inp) {
     pushUndo();
     cur.name = inp.value;
     if (cur.name.trim()) {
-      gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+      scheduleSave(cur);
     }
     var hasChildren = nodes.some(x => x.parentId === cur.id);
     var isExpanded = hasChildren && !collapsed[cur.id];
@@ -1503,14 +1767,14 @@ function handleKey(e, inp) {
   if (e.key === 'ArrowUp') {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+    if (cur.name.trim()) scheduleSave(cur);
     if (vi > 0) { focusId = list[vi - 1].node.id; render(); }
     return;
   }
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+    if (cur.name.trim()) scheduleSave(cur);
     if (vi < list.length - 1) { focusId = list[vi + 1].node.id; render(); }
     return;
   }
@@ -1606,7 +1870,7 @@ function handleKey(e, inp) {
     cur.isSection = !cur.isSection;
     if (!cur.isSection && !cur.date) cur.date = localDateTime();
     focusId = id;
-    gsr('saveNodeServer', Object.assign({}, cur)).catch(function(){});
+    scheduleSave(cur);
     render();
     return;
   }
@@ -3184,7 +3448,7 @@ function applyPicker(node, sectionId, assigneeEmail) {
   node.order = orderBetween(insertAfter, insertAfter + 1);
   nodes.splice(insertAfter + 1, 0, node);
   if (sectionId) { collapsed[sectionId] = false; saveCollapsed(); }
-  gsr('saveNodeServer', Object.assign({}, node)).catch(function(){});
+  scheduleSave(node);
   focusId = node.id;
   render();
 }
@@ -3197,7 +3461,7 @@ function assignTo(node, email) {
   pushUndo();
   node.assignedTo = email || null;
   node.assignedBy = email ? (currentUser || '') : null;
-  gsr('saveNodeServer', Object.assign({}, node)).catch(function(){});
+  scheduleSave(node);
   render();
 }
 
@@ -3208,7 +3472,7 @@ function saveActiveInput() {
     var n = nodes.find(function(x) { return x.id === inp.dataset.id; });
     if (n) {
       n.name = inp.value.trim();
-      gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+      scheduleSave(n);
     }
   }
 }
@@ -3429,7 +3693,7 @@ function performDrop(srcIds, tgtId, mode) {
     if (n) {
       var idx = nodes.findIndex(function(x) { return x.id === id; });
       n.order = orderBetween(idx - 1, idx + 1);
-      gsr('saveNodeServer', Object.assign({}, n)).catch(function(e) { console.error('drag save error', e); });
+      scheduleSave(n);
     }
   });
 
@@ -3456,9 +3720,12 @@ function pushUndo() {
 
 function undo() {
   if (!undoStack.length) return;
-  opGeneration++;
-  pendingSave.clear();
-  clearTimeout(syncTimer);
+  bumpGeneration();
+  // Clear any pending saves/deletes — they reflected pre-undo state and are now invalid
+  queueState.saves = {};
+  queueState.deletes = {};
+  persistQueue();
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
   // Save current state to redo stack before restoring
   redoStack.push({
     nodes: JSON.parse(JSON.stringify(nodes)),
@@ -3497,25 +3764,32 @@ function undo() {
   if (prev.zoomedId !== undefined) { zoomedId = prev.zoomedId; updateZoomCrumb(); }
   saveCollapsed();
 
-  var gen = opGeneration;
+  // Queue the restored nodes for save (they are the truth now)
   toSave.forEach(function(n) {
-    enqueue(function() {
-      if (opGeneration !== gen) return Promise.resolve();
-      return gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
-    });
+    // Mark as touched so reconcile won't overwrite them before the batch goes out
+    touchNode(n.id);
+    queueState.saves[n.id] = Object.assign({}, n);
   });
   if (toDelete.length) {
-    deleteRemote(null, toDelete.map(function(n) { return n.id; }));
+    toDelete.forEach(function(n) {
+      touchNode(n.id);
+      queueState.deletes[n.id] = true;
+      delete queueState.saves[n.id];
+    });
   }
+  persistQueue();
+  if (toSave.length || toDelete.length) armFlush();
 
   render();
 }
 
 function redo() {
   if (!redoStack.length) return;
-  opGeneration++;
-  pendingSave.clear();
-  clearTimeout(syncTimer);
+  bumpGeneration();
+  queueState.saves = {};
+  queueState.deletes = {};
+  persistQueue();
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
   undoStack.push({
     nodes: JSON.parse(JSON.stringify(nodes)),
     collapsed: JSON.parse(JSON.stringify(collapsed))
@@ -3541,14 +3815,17 @@ function redo() {
   collapsed = next.collapsed;
   saveCollapsed();
 
-  var gen = opGeneration;
   toSave.forEach(function(n) {
-    enqueue(function() {
-      if (opGeneration !== gen) return Promise.resolve();
-      return gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
-    });
+    touchNode(n.id);
+    queueState.saves[n.id] = Object.assign({}, n);
   });
-  if (toDelete.length) deleteRemote(null, toDelete.map(function(n) { return n.id; }));
+  toDelete.forEach(function(n) {
+    touchNode(n.id);
+    queueState.deletes[n.id] = true;
+    delete queueState.saves[n.id];
+  });
+  persistQueue();
+  if (toSave.length || toDelete.length) armFlush();
   render();
 }
 
@@ -4187,7 +4464,7 @@ document.addEventListener('keydown', function(e) {
       if (!n) return;
       n.isSection = !n.isSection;
       if (!n.isSection && !n.date) n.date = localDateTime();
-      gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+      scheduleSave(n);
     });
     render();
     return;
@@ -4271,7 +4548,7 @@ function showMobileActionSheet(nodeId) {
         pushUndo();
         n.isSection = !n.isSection;
         if (!n.isSection && !n.date) n.date = localDateTime();
-        gsr('saveNodeServer', Object.assign({}, n)).catch(function(){});
+        scheduleSave(n);
         render();
       } else if (action === 'share') {
         showShare(nodeId);
@@ -4321,38 +4598,63 @@ function showMobileActionSheet(nodeId) {
 }
 
 function switchUser() {
-  localStorage.removeItem('momentum_user_email');
-  localStorage.removeItem('momentum_access_token');
-  localStorage.removeItem('momentum_token_expiry');
-  currentUser = '';
-  nodes = [];
-  if (typeof google !== 'undefined' && google.accounts && _googleAccessToken) {
-    google.accounts.oauth2.revoke(_googleAccessToken, function() {});
-  }
-  _googleAccessToken = null;
-  showSignIn();
+  var done = function() {
+    localStorage.removeItem('momentum_user_email');
+    localStorage.removeItem('momentum_access_token');
+    localStorage.removeItem('momentum_token_expiry');
+    // Also clear the persistent queue — this user's queue should not carry over
+    // to a different user account
+    localStorage.removeItem(QUEUE_KEY);
+    queueState.saves = {};
+    queueState.deletes = {};
+    nodeTouched = {};
+    currentUser = '';
+    nodes = [];
+    if (typeof google !== 'undefined' && google.accounts && _googleAccessToken) {
+      google.accounts.oauth2.revoke(_googleAccessToken, function() {});
+    }
+    _googleAccessToken = null;
+    showSignIn();
+  };
+  // Flush before switching so the current user's work makes it to the sheet
+  if (queueIsEmpty()) { done(); }
+  else { flushNow(3000).then(done); }
 }
 
+// Boot sequence:
+//   1. Restore the persistent save queue (unsaved work from previous session / crash)
+//   2. Verify auth via whoAmI
+//   3. Flush the restored queue FIRST (so previous-session edits go out before
+//      we overwrite local state with a fetch)
+//   4. Fetch initial data (initial=true: full replace is safe here, queue is drained)
+// No polling interval — we rely on visibilitychange for passive refresh and
+// the user refresh button for active refresh.
 function bootApp() {
+  loadQueue(); // restore any unsaved work from last session
   gsr('whoAmI').then(function(r) {
     if (r && r.email) {
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
       var pill = document.getElementById('userPill');
       if (pill) pill.textContent = currentUser;
-      fetchAll();
-      setInterval(function() {
-        if (pendingSave.size === 0 && !syncTimer && opQueueDepth === 0 &&
-            document.activeElement && !document.activeElement.classList.contains('node-input')) fetchAll();
-      }, 30000);
+      // Step 3: flush queue first (up to 3s) so pre-existing unsaved edits
+      // are on the server before we fetch and reconcile.
+      var flushPromise = queueIsEmpty() ? Promise.resolve(true) : flushNow(3000);
+      flushPromise.then(function() {
+        // Step 4: full initial fetch. The queue is either empty or its items
+        // will be protected by their own queueState.saves entries on reconcile.
+        fetchAll(queueIsEmpty());
+      });
     }
   }).catch(function(e) {
     console.error('Boot error:', e.message);
     if (e.message === 'Not authenticated' || e.message === 'Unauthorized') {
-      // Try silent refresh before giving up — Apps Script can return 401 transiently
-      silentRefreshToken().then(function() {
-        bootApp(); // retry once with fresh token
+      // Silent refresh with retry — phase 3 auth resilience.
+      silentRefreshWithRetry(3).then(function() {
+        bootApp();
       }).catch(function() {
+        // Genuine auth failure. Don't wipe the queue — it stays in localStorage
+        // and will flush after next login. Just show the sign-in screen.
         localStorage.removeItem('momentum_access_token');
         localStorage.removeItem('momentum_token_expiry');
         _googleAccessToken = null;
@@ -4421,11 +4723,32 @@ document.addEventListener('DOMContentLoaded', function() {
   if (btnPrev) btnPrev.onclick = function() { searchPrev(); };
   var btnClear = document.getElementById('searchClear');
   if (btnClear) btnClear.onclick = function() { clearSearch(); if (searchInp) searchInp.focus(); };
+  var lastVisibleFetch = 0;
   document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && opQueueDepth === 0 && pendingSave.size === 0 &&
-        document.activeElement && !document.activeElement.classList.contains('node-input')) {
-      fetchAll();
+    if (document.hidden) {
+      // Tab losing focus — flush queue synchronously if there's work to do.
+      // The fetch may not complete but it fires the request, and if it fails
+      // the queue is persisted and retries on next boot.
+      if (!queueIsEmpty() && !batchInFlight) flushBatch();
+      return;
     }
+    // If we have queued work, flush it rather than fetching
+    if (!queueIsEmpty()) {
+      flushBatch();
+      return;
+    }
+    // Cooldown — don't re-fetch within 60s of the last fetch
+    if (Date.now() - lastVisibleFetch < 60000) return;
+    lastVisibleFetch = Date.now();
+    fetchAll(false); // reconcile mode — protects in-progress edits
+  });
+  // Best-effort flush on page close. Queue is persisted to localStorage so
+  // worst case we retry on next boot — this just speeds things up.
+  window.addEventListener('beforeunload', function() {
+    if (!queueIsEmpty() && !batchInFlight) flushBatch();
+  });
+  window.addEventListener('pagehide', function() {
+    if (!queueIsEmpty() && !batchInFlight) flushBatch();
   });
   // Boot: check for valid token, or try silent refresh
   if (isTokenValid()) {
