@@ -4134,6 +4134,53 @@ function applyMobileStyles() {
   }
 }
 
+// Mobile keyboard accessory bar — show/hide above the keyboard while editing.
+// On desktop these are no-ops because the bar is hidden via CSS (.is-mobile gate).
+function showKbBar(inp) {
+  if (!isMobile) return;
+  var bar = document.getElementById('kbBar');
+  if (bar) bar.classList.add('active');
+}
+function hideKbBar() {
+  var bar = document.getElementById('kbBar');
+  if (bar) bar.classList.remove('active');
+}
+// Wire the bar's buttons once. Idempotent — re-runs are safe.
+var _kbBarInited = false;
+function initKbBar() {
+  if (_kbBarInited) return;
+  _kbBarInited = true;
+  var get = function(id) { return document.getElementById(id); };
+  var activeInput = function() {
+    var el = document.activeElement;
+    return el && el.classList && el.classList.contains('node-input') ? el : null;
+  };
+  // Use mousedown to fire BEFORE blur so we can synthesise the right keystroke
+  var fire = function(key, opts) {
+    var inp = activeInput();
+    if (!inp) return;
+    var ev = new KeyboardEvent('keydown', Object.assign({ key: key, bubbles: true, cancelable: true }, opts || {}));
+    inp.dispatchEvent(ev);
+  };
+  var btn;
+  if ((btn = get('kbIndent')))  btn.onmousedown = function(e) { e.preventDefault(); fire('Tab'); };
+  if ((btn = get('kbOutdent'))) btn.onmousedown = function(e) { e.preventDefault(); fire('Tab', { shiftKey: true }); };
+  if ((btn = get('kbUp')))      btn.onmousedown = function(e) { e.preventDefault(); fire('ArrowUp'); };
+  if ((btn = get('kbDown')))    btn.onmousedown = function(e) { e.preventDefault(); fire('ArrowDown'); };
+  if ((btn = get('kbToday')))   btn.onmousedown = function(e) {
+    e.preventDefault();
+    var inp = activeInput();
+    if (!inp) return;
+    var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
+    if (n && !n.isSection) { pushUndo(); n.date = localDateTime(); scheduleSave(n); render(); }
+  };
+  if ((btn = get('kbDone'))) btn.onmousedown = function(e) {
+    e.preventDefault();
+    var inp = activeInput();
+    if (inp) inp.blur();
+  };
+}
+
 function checkMobile() {
   var ua = navigator.userAgent || navigator.vendor || window.opera || '';
   var uaMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua);
@@ -4781,7 +4828,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (btnPrev) btnPrev.onclick = function() { searchPrev(); };
   var btnClear = document.getElementById('searchClear');
   if (btnClear) btnClear.onclick = function() { clearSearch(); if (searchInp) searchInp.focus(); };
-  var lastVisibleFetch = 0;
+  var lastVisibleFetch = Date.now(); // start with cooldown active so boot fetch is the only one
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
       // Tab losing focus — flush queue synchronously if there's work to do.
