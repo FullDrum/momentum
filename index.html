@@ -3394,33 +3394,30 @@ function performDrop(srcIds, tgtId, mode) {
   var tgtIdx = nodes.findIndex(function(n) { return n.id === tgtId; });
   var newParentId, insertAt;
 
+  var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
+
+  // In flat views, never allow nesting — treat child drop as below
+  if (mode === 'child' && isFlat) mode = 'below';
+
+  var newParentId, insertAt;
+
   if (mode === 'child') {
-    // In flat views (today/all/assigned), treat 'child' as 'below' — no nesting
-    var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
-    if (isFlat) {
-      mode = 'below';
-    } else {
-      newParentId = tgtId;
-      insertAt = tgtIdx + descendants(tgtId).length + 1;
-      collapsed[tgtId] = false;
-      saveCollapsed();
-    }
-  }
-  if (mode !== 'child') {
-    if (mode === 'above') {
-      newParentId = tgt.parentId;
-      insertAt = tgtIdx;
-    } else {
-      newParentId = tgt.parentId;
-      insertAt = tgtIdx + descendants(tgtId).length + 1;
-    }
+    newParentId = tgtId;
+    insertAt = tgtIdx + descendants(tgtId).length + 1;
+    collapsed[tgtId] = false;
+    saveCollapsed();
+  } else if (mode === 'above') {
+    newParentId = tgt.parentId;
+    insertAt = tgtIdx;
+  } else { // below
+    newParentId = tgt.parentId;
+    insertAt = tgtIdx + descendants(tgtId).length + 1;
   }
 
-  var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
   srcIds.forEach(function(id) {
     var n = moveNodes.find(function(x) { return x.id === id; });
     if (n) {
-      // In flat views preserve each node's own parentId — we're only reordering, not reparenting
+      // In flat views preserve each node's own parentId — only reorder, don't reparent
       if (!isFlat) n.parentId = newParentId;
     }
   });
