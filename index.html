@@ -1174,7 +1174,7 @@ function render(preserveScroll) {
 
   if (!list.length) {
     if (activeTab === 'tree') el.innerHTML = '<div class="empty">Nothing here yet.<br><button class="add-root-btn" onclick="addRoot()">+ Add first item</button></div>';
-    else if (activeTab === 'today') el.innerHTML = `<div class="section-label">${TODAYLABEL}</div><div class="empty">No tasks for today.</div>`;
+    else if (activeTab === 'today') el.innerHTML = `<div class="section-label">${TODAYLABEL}</div><div class="empty">No tasks for today.<br><button class="add-root-btn" onclick="addTodayTask()">+ Add task</button></div>`;
     else if (activeTab === 'assigned') el.innerHTML = '<div class="empty">No tasks assigned to you.</div>';
     else el.innerHTML = '<div class="empty">No tasks yet.</div>';
     return;
@@ -1208,6 +1208,7 @@ function render(preserveScroll) {
   } else {
     var html = activeTab === 'today' ? `<div class="section-label">${TODAYLABEL}</div>` : '';
     html += list.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+    if (activeTab === 'today') html += `<div style="padding:10px 14px;"><button class="add-root-btn" onclick="addTodayTask()" style="font-size:12px;padding:6px 14px;">+ New task</button></div>`;
     el.innerHTML = html;
   }
 
@@ -1931,6 +1932,19 @@ function handleKey(e, inp) {
 function addRoot() {
   var n = { id: newId(), name: '', parentId: null, isSection: true, done: false, owner: currentUser };
   nodes.push(n); focusId = n.id; scheduleSave(n); render();
+}
+
+function addTodayTask() {
+  pushUndo();
+  var n = {
+    id: newId(), name: '', parentId: lastPickedSection || null,
+    isSection: false, done: false,
+    date: localDateTime(), owner: currentUser,
+    order: Date.now()
+  };
+  nodes.push(n);
+  focusId = n.id;
+  render();
 }
 
 function mobileAddItem() {
