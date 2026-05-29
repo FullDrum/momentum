@@ -121,6 +121,8 @@
   .today-badge { font-size: 10px; padding: 1px 7px; border-radius: 8px; margin-right: 4px; white-space: nowrap; flex-shrink: 0; background: var(--bg2); color: var(--text2);  align-self: flex-start; margin-top: 4px; }
   .today-badge.is-today { background: var(--accent); color: var(--bg); }
   .assignee-badge { font-size: 10px; padding: 1px 7px; border-radius: 8px; margin-right: 4px; white-space: nowrap; flex-shrink: 0; background: var(--blue-bg); color: var(--blue-text);  align-self: flex-start; margin-top: 5px; }
+  .watch-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-right: 4px; white-space: nowrap; flex-shrink: 0; background: var(--bg2); color: var(--text2);  align-self: flex-start; margin-top: 4px; }
+  .act-btn.watching { color: var(--accent); opacity: 1; }
   .zoom-btn { color: var(--text3); }
   .act-btn { background: none; border: none; cursor: pointer; font-size: 11px; color: var(--text3); padding: 2px 5px; border-radius: 3px; opacity: 0; flex-shrink: 0; white-space: nowrap;  align-self: flex-start; margin-top: 4px; }
   .mobile-menu-btn { display: none; font-size: 20px; color: var(--text3); padding: 6px 8px; cursor: pointer; align-self: center; flex-shrink: 0; background: none; border: none; font-family: inherit; }
@@ -1083,6 +1085,8 @@ function normalizeNodes(raw) {
       if (!n.parentId) n.parentId = null;
       // Normalize completedDate
       if (!n.completedDate) n.completedDate = null;
+      // Normalize watching (done + watch). Sheet may send '', 'TRUE'/'FALSE', bool.
+      n.watching = n.watching === true || n.watching === 'true' || n.watching === 'TRUE';
       n.readOnlyContext = n.readOnlyContext === true || n.readOnlyContext === 'true';
       return n;
     });
@@ -1098,8 +1102,9 @@ function ancestors(id) {
 function breadcrumb(id) { return ancestors(id).map(n => n.name || '…').join(' › '); }
 function flattenVisible(pid, depth) {
   return children(pid).flatMap(n => {
-    // In tree view, hide done nodes if hideDone (except done today)
-    if (activeTab === 'tree' && hideDone && n.done) {
+    // In tree view, hide done nodes if hideDone (except done today, and except
+    // watched-done nodes which stay visible regardless of Hide Done).
+    if (activeTab === 'tree' && hideDone && n.done && !n.watching) {
       // Hide if completed before today (use completedDate if available, fall back to date)
       var completedOn = n.completedDate || (n.date ? n.date.slice(0,10) : null);
       if (completedOn !== TODAY) return [];
@@ -1353,9 +1358,11 @@ function rowHTML(n, depth, flat = false) {
     if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
     meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>' + meta;
   }
+  if (n.watching) meta = '<span class="watch-badge" title="Done &amp; watching">👁</span>' + meta;
 
   var acts = '';
   if (canEdit(n)) {
+    if (!n.isSection) acts += `<button class="act-btn${n.watching ? ' watching' : ''}" data-watch="${n.id}" title="${n.watching ? 'Stop watching' : 'Done & watch'}">👁</button>`;
     acts += `<button class="act-btn" data-toggletype="${n.id}">${n.isSection ? '→ task' : '→ section'}</button>`;
     if (!n.isSection) acts += `<button class="act-btn" data-promote="${n.id}">↑ today</button>`;
     if (isOwner(n)) {
@@ -1434,6 +1441,7 @@ function attachEvents() {
           if (!an || an.isSection) return;
           an.done = cb.checked;
           an.completedDate = an.done ? TODAY : null;
+          if (!an.done) an.watching = false; // un-done clears watch (watching implies done)
           scheduleSave(an);
           // Update DOM in-place for each affected row
           var affRow = document.querySelector('.node-row[data-id="' + aid + '"]');
@@ -1451,6 +1459,22 @@ function attachEvents() {
         });
       }
     };
+  });
+  el.querySelectorAll('[data-watch]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    var n = nodes.find(x => x.id === b.dataset.watch);
+    if (!n || n.isSection) return;
+    pushUndo();
+    if (n.watching) {
+      // Toggle off: stop watching. Leave done state untouched.
+      n.watching = false;
+    } else {
+      // Done & Watch: mark done and watch.
+      n.watching = true;
+      if (!n.done) { n.done = true; n.completedDate = TODAY; }
+    }
+    scheduleSave(n);
+    render(true);
   });
   el.querySelectorAll('[data-toggletype]').forEach(b => b.onclick = e => {
     e.stopPropagation();
@@ -3813,6 +3837,7 @@ function undo() {
     // Check if anything meaningful changed
     return curr.name !== n.name || curr.parentId !== n.parentId ||
            curr.isSection !== n.isSection || curr.done !== n.done ||
+           curr.watching !== n.watching ||
            curr.date !== n.date || curr.order !== n.order;
   });
 
@@ -3872,6 +3897,7 @@ function redo() {
     if (!curr) return true;
     return curr.name !== n.name || curr.parentId !== n.parentId ||
            curr.isSection !== n.isSection || curr.done !== n.done ||
+           curr.watching !== n.watching ||
            curr.date !== n.date || curr.order !== n.order;
   });
   var toDelete = nodes.filter(function(n) { return !nextMap[n.id]; });
@@ -4631,6 +4657,7 @@ function showMobileActionSheet(nodeId) {
       '<div style="padding:0 8px;font-size:12px;color:var(--text3);margin-bottom:4px;padding-left:20px;">' + esc(n.name||'').slice(0,40) + '</div>' +
       (canEdit(n) ? [
         !n.done ? '<button class="msa-btn" data-action="done">✓ Mark done</button>' : '<button class="msa-btn" data-action="undone">↩ Mark not done</button>',
+        !n.isSection ? (n.watching ? '<button class="msa-btn" data-action="unwatch">👁 Stop watching</button>' : '<button class="msa-btn" data-action="watch">👁 Done &amp; watch</button>') : '',
         !n.isSection ? '<button class="msa-btn" data-action="today">📅 Schedule today</button>' : '',
         '<button class="msa-btn" data-action="section">' + (n.isSection ? '→ Convert to task' : '→ Convert to section') + '</button>',
         '<button class="msa-btn" data-action="move">↗ Move to section</button>',
@@ -4664,6 +4691,16 @@ function showMobileActionSheet(nodeId) {
         render();
       } else if (action === 'share') {
         showShare(nodeId);
+      } else if (action === 'watch' || action === 'unwatch') {
+        pushUndo();
+        if (action === 'watch') {
+          n.watching = true;
+          if (!n.done) { n.done = true; n.completedDate = TODAY; }
+        } else {
+          n.watching = false;
+        }
+        scheduleSave(n);
+        render(true);
       } else if (action === 'done' || action === 'undone') {
         pushUndo();
         var isDone = (action === 'done');
@@ -4674,11 +4711,12 @@ function showMobileActionSheet(nodeId) {
           if (!tn || tn.isSection) return;
           tn.done = isDone;
           tn.completedDate = isDone ? TODAY : null;
+          if (!isDone) tn.watching = false; // un-done clears watch
           scheduleSave(tn);
           // Also mark descendants
           descendants(tid).forEach(function(did) {
             var dn = nodes.find(function(x){ return x.id === did; });
-            if (dn && !dn.isSection) { dn.done = isDone; dn.completedDate = tn.completedDate; scheduleSave(dn); }
+            if (dn && !dn.isSection) { dn.done = isDone; dn.completedDate = tn.completedDate; dn.watching = isDone ? dn.watching : false; scheduleSave(dn); }
           });
         });
         selectionMode = false;
