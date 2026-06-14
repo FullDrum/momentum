@@ -4880,25 +4880,30 @@ document.addEventListener('DOMContentLoaded', function() {
   if (btnPrev) btnPrev.onclick = function() { searchPrev(); };
   var btnClear = document.getElementById('searchClear');
   if (btnClear) btnClear.onclick = function() { clearSearch(); if (searchInp) searchInp.focus(); };
-  var lastVisibleFetch = Date.now(); // start with cooldown active so boot fetch is the only one
+  // Refresh whenever the window/tab is re-activated (PC alt-tab fires `focus`;
+  // mobile tab-switch and PC tab-switch fire `visibilitychange`). A small 2s
+  // cooldown guards against the two events firing back-to-back on the same
+  // activation, but is short enough to feel "every time" to the user.
+  var lastVisibleFetch = Date.now(); // boot fetch counts as the first
+  function onWindowActivated(source) {
+    if (document.hidden) return;
+    // If we have queued work, flush it rather than fetching
+    if (!queueIsEmpty()) { flushBatch(); return; }
+    // Tiny cooldown to coalesce simultaneous focus + visibilitychange
+    if (Date.now() - lastVisibleFetch < 2000) return;
+    lastVisibleFetch = Date.now();
+    mlog('refresh on', source);
+    fetchAll(false); // reconcile mode — protects in-progress edits
+  }
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
       // Tab losing focus — flush queue synchronously if there's work to do.
-      // The fetch may not complete but it fires the request, and if it fails
-      // the queue is persisted and retries on next boot.
       if (!queueIsEmpty() && !batchInFlight) flushBatch();
       return;
     }
-    // If we have queued work, flush it rather than fetching
-    if (!queueIsEmpty()) {
-      flushBatch();
-      return;
-    }
-    // Cooldown — don't re-fetch within 60s of the last fetch
-    if (Date.now() - lastVisibleFetch < 60000) return;
-    lastVisibleFetch = Date.now();
-    fetchAll(false); // reconcile mode — protects in-progress edits
+    onWindowActivated('visibilitychange');
   });
+  window.addEventListener('focus', function() { onWindowActivated('focus'); });
   // Best-effort flush on page close. Queue is persisted to localStorage so
   // worst case we retry on next boot — this just speeds things up.
   window.addEventListener('beforeunload', function() {
