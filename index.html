@@ -384,6 +384,12 @@
       <span>Show watched</span>
     </label>
   </div>
+  <div class="today-options" id="allOptions" style="display:none;">
+    <label class="today-watch-toggle" title="Include the Watching section in All Tasks">
+      <input type="checkbox" id="showWatchedAllToggle" onchange="toggleShowWatchedAll(this.checked)" />
+      <span>Show watched</span>
+    </label>
+  </div>
   <div id="zoomCrumb" style="display:none;padding:6px 14px;font-size:11px;color:var(--text2);background:var(--bg2);border-bottom:0.5px solid var(--border);flex-shrink:0;"></div>
   <div id="treeEl" class="tree"><div class="empty">Loading…</div></div>
 
@@ -1146,7 +1152,12 @@ function visibleList() {
     (n.name && n.name.trim() || n.id === focusId) &&
     doneFilter(n)
   );
-  else if (activeTab === 'all') tasks = nodes.filter(n => !n.isSection && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
+  else if (activeTab === 'all') tasks = nodes.filter(n =>
+    !n.isSection &&
+    (!n.watching || showWatchedAll) &&
+    (n.name && n.name.trim() || n.id === focusId) &&
+    doneFilter(n)
+  );
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
@@ -1192,8 +1203,12 @@ function render(preserveScroll) {
   if (!el) return;
   var todayOptions = document.getElementById('todayOptions');
   if (todayOptions) todayOptions.style.display = activeTab === 'today' ? 'flex' : 'none';
+  var allOptions = document.getElementById('allOptions');
+  if (allOptions) allOptions.style.display = activeTab === 'all' ? 'flex' : 'none';
   var watchedToggle = document.getElementById('showWatchedTodayToggle');
   if (watchedToggle) watchedToggle.checked = showWatchedToday;
+  var watchedAllToggle = document.getElementById('showWatchedAllToggle');
+  if (watchedAllToggle) watchedAllToggle.checked = showWatchedAll;
   var savedScroll = preserveScroll ? el.scrollTop : 0;
 
   // If search is open with a query, show search results instead
@@ -2341,6 +2356,7 @@ var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var hideDone = localStorage.getItem('momentum_hide_done') === 'true';
 var showWatchedToday = localStorage.getItem('momentum_show_watched_today') === 'true';
+var showWatchedAll = localStorage.getItem('momentum_show_watched_all') !== 'false';
 var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var dragStartY = 0;
@@ -3177,6 +3193,12 @@ function toggleHideDone() {
 function toggleShowWatchedToday(checked) {
   showWatchedToday = !!checked;
   localStorage.setItem('momentum_show_watched_today', showWatchedToday);
+  render(true);
+}
+
+function toggleShowWatchedAll(checked) {
+  showWatchedAll = !!checked;
+  localStorage.setItem('momentum_show_watched_all', showWatchedAll);
   render(true);
 }
 
