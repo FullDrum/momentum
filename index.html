@@ -1121,13 +1121,16 @@ function visibleList() {
   }
   var tasks;
   var doneFilter = function(n) {
+    // Watched tasks act as completed, but remain visible in All Tasks under
+    // their dedicated Watching section even when Hide Done is enabled.
+    if (activeTab === 'all' && n.watching) return true;
     if (!hideDone) return true;
     if (!n.done) return true;
     // Show done tasks completed today
     var completedOn = n.completedDate || (n.date ? n.date.slice(0,10) : null);
     return completedOn === TODAY;
   };
-  if (activeTab === 'today') tasks = nodes.filter(n => !n.isSection && n.date && n.date.slice(0,10) === TODAY && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
+  if (activeTab === 'today') tasks = nodes.filter(n => !n.isSection && !n.watching && n.date && n.date.slice(0,10) === TODAY && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   else if (activeTab === 'all') tasks = nodes.filter(n => !n.isSection && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -1142,6 +1145,9 @@ function visibleList() {
     seen.add(n.id);
     var result = [{ node: n, depth: depth, flat: true }];
     children(n.id).filter(function(c) {
+      // A watched child of a normal task becomes a top-level entry in the
+      // Watching section instead of remaining under its ordinary date group.
+      if (activeTab === 'all' && c.watching && !n.watching) return false;
       return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
     }).forEach(function(c) {
       result = result.concat(expandNode(c, depth + 1));
@@ -1154,7 +1160,7 @@ function visibleList() {
     if (seen.has(n.id)) return; // already rendered as a child
     // If this node's parent is also in the task set it will be rendered
     // under its parent when that parent is processed — skip it here
-    if (n.parentId && taskSet.has(n.parentId)) return;
+    if (n.parentId && taskSet.has(n.parentId) && !(activeTab === 'all' && n.watching)) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
   return expanded;
@@ -1194,7 +1200,9 @@ function render(preserveScroll) {
     var keyMap = {};
     list.forEach(function(item) {
       if (item.depth === 0) {
-        var k = item.node.date ? item.node.date.slice(0, 10) : 'undated';
+        var k = activeTab === 'all' && item.node.watching
+          ? 'watching'
+          : item.node.date ? item.node.date.slice(0, 10) : 'undated';
         if (!keyMap[k]) { keyMap[k] = []; keyOrder.push(k); }
         keyMap[k].push(item);
       } else {
@@ -1203,9 +1211,25 @@ function render(preserveScroll) {
         if (lastKey) keyMap[lastKey].push(item);
       }
     });
-    keyOrder.sort(function(a, b) { return b.localeCompare(a); });
+    keyOrder.sort(function(a, b) {
+      if (activeTab !== 'all') return b.localeCompare(a);
+      // All Tasks order: Today, Watching, future dates, overdue dates, Undated.
+      if (a === b) return 0;
+      if (a === TODAY) return -1;
+      if (b === TODAY) return 1;
+      if (a === 'watching') return -1;
+      if (b === 'watching') return 1;
+      if (a === 'undated') return 1;
+      if (b === 'undated') return -1;
+      var aFuture = a > TODAY;
+      var bFuture = b > TODAY;
+      if (aFuture && bFuture) return a.localeCompare(b);
+      if (aFuture) return -1;
+      if (bFuture) return 1;
+      return b.localeCompare(a);
+    });
     el.innerHTML = keyOrder.map(function(k) {
-      var lbl = k === TODAY ? TODAYLABEL : k === 'undated' ? 'Undated'
+      var lbl = k === TODAY ? TODAYLABEL : k === 'watching' ? 'Watching' : k === 'undated' ? 'Undated'
         : new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
       return '<div class="section-label">' + lbl + '</div>' +
         keyMap[k].map(function(item) { return rowHTML(item.node, item.depth, item.flat); }).join('');
