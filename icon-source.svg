@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#17212B"/>
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M84 316h112M112 244h112M160 172h100" stroke="#F5F2EA" stroke-width="32"/>
-    <path d="M216 276l56 56L416 160" stroke="#F4B942" stroke-width="40"/>
+    <circle cx="256" cy="256" r="148" stroke="#F5F2EA" stroke-width="36"
+      stroke-dasharray="688 244" transform="rotate(-42 256 256)"/>
+    <path d="M176 260l56 56 116-136" stroke="#F4B942" stroke-width="38"/>
   </g>
 </svg>
 
