@@ -55,6 +55,9 @@
   .tab { flex: 1; padding: 9px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; }
   .tab.active { color: var(--text); border-bottom-color: var(--accent); }
   .tab:hover:not(.active) { background: var(--bg2); color: var(--text); }
+  .today-options { display: flex; align-items: center; justify-content: flex-end; padding: 5px 14px; border-bottom: 0.5px solid var(--border); background: var(--bg); flex-shrink: 0; }
+  .today-watch-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text2); font-size: 11px; cursor: pointer; user-select: none; }
+  .today-watch-toggle input { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
   /* Tree */
   .tree { flex: 1; overflow-y: auto; padding: 4px 0 60px; }
   .tree.drag-selecting { user-select: none; }
@@ -374,6 +377,12 @@
     <button class="tab" data-tab="all">All tasks</button>
     <button class="tab" data-tab="tree">Projects</button>
     <button class="tab" data-tab="assigned">Assigned to me</button>
+  </div>
+  <div class="today-options" id="todayOptions">
+    <label class="today-watch-toggle" title="Include Done &amp; Watch items in Today">
+      <input type="checkbox" id="showWatchedTodayToggle" onchange="toggleShowWatchedToday(this.checked)" />
+      <span>Show watched</span>
+    </label>
   </div>
   <div id="zoomCrumb" style="display:none;padding:6px 14px;font-size:11px;color:var(--text2);background:var(--bg2);border-bottom:0.5px solid var(--border);flex-shrink:0;"></div>
   <div id="treeEl" class="tree"><div class="empty">Loading…</div></div>
@@ -1124,13 +1133,19 @@ function visibleList() {
     // Watched tasks act as completed, but remain visible in All Tasks under
     // their dedicated Watching section even when Hide Done is enabled.
     if (activeTab === 'all' && n.watching) return true;
+    if (activeTab === 'today' && showWatchedToday && n.watching) return true;
     if (!hideDone) return true;
     if (!n.done) return true;
     // Show done tasks completed today
     var completedOn = n.completedDate || (n.date ? n.date.slice(0,10) : null);
     return completedOn === TODAY;
   };
-  if (activeTab === 'today') tasks = nodes.filter(n => !n.isSection && !n.watching && n.date && n.date.slice(0,10) === TODAY && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
+  if (activeTab === 'today') tasks = nodes.filter(n =>
+    !n.isSection &&
+    ((!n.watching && n.date && n.date.slice(0,10) === TODAY) || (showWatchedToday && n.watching)) &&
+    (n.name && n.name.trim() || n.id === focusId) &&
+    doneFilter(n)
+  );
   else if (activeTab === 'all') tasks = nodes.filter(n => !n.isSection && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -1172,6 +1187,10 @@ function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo =
 function render(preserveScroll) {
   var el = document.getElementById('treeEl');
   if (!el) return;
+  var todayOptions = document.getElementById('todayOptions');
+  if (todayOptions) todayOptions.style.display = activeTab === 'today' ? 'flex' : 'none';
+  var watchedToggle = document.getElementById('showWatchedTodayToggle');
+  if (watchedToggle) watchedToggle.checked = showWatchedToday;
   var savedScroll = preserveScroll ? el.scrollTop : 0;
 
   // If search is open with a query, show search results instead
@@ -2306,6 +2325,7 @@ var assigneeFavourites = JSON.parse(localStorage.getItem('momentum_asg_favs') ||
 var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var hideDone = localStorage.getItem('momentum_hide_done') === 'true';
+var showWatchedToday = localStorage.getItem('momentum_show_watched_today') === 'true';
 var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var dragStartY = 0;
@@ -3136,6 +3156,12 @@ function toggleHideDone() {
   localStorage.setItem('momentum_hide_done', hideDone);
   var btn = document.getElementById('hideDoneBtn');
   if (btn) btn.textContent = hideDone ? 'Show done' : 'Hide done';
+  render(true);
+}
+
+function toggleShowWatchedToday(checked) {
+  showWatchedToday = !!checked;
+  localStorage.setItem('momentum_show_watched_today', showWatchedToday);
   render(true);
 }
 
