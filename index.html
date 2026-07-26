@@ -1160,9 +1160,9 @@ function visibleList() {
     seen.add(n.id);
     var result = [{ node: n, depth: depth, flat: true }];
     children(n.id).filter(function(c) {
-      // A watched child of a normal task becomes a top-level entry in the
-      // Watching section instead of remaining under its ordinary date group.
-      if (activeTab === 'all' && c.watching && !n.watching) return false;
+      // Keep watched and active tasks in separate top-level lists in both
+      // All Tasks and Today.
+      if ((activeTab === 'all' || activeTab === 'today') && c.watching !== n.watching) return false;
       return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
     }).forEach(function(c) {
       result = result.concat(expandNode(c, depth + 1));
@@ -1175,7 +1175,10 @@ function visibleList() {
     if (seen.has(n.id)) return; // already rendered as a child
     // If this node's parent is also in the task set it will be rendered
     // under its parent when that parent is processed — skip it here
-    if (n.parentId && taskSet.has(n.parentId) && !(activeTab === 'all' && n.watching)) return;
+    var parentTask = n.parentId ? nodes.find(function(x) { return x.id === n.parentId; }) : null;
+    var separateWatchList = (activeTab === 'all' || activeTab === 'today') &&
+      parentTask && n.watching !== parentTask.watching;
+    if (n.parentId && taskSet.has(n.parentId) && !separateWatchList) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
   return expanded;
@@ -1253,11 +1256,23 @@ function render(preserveScroll) {
       return '<div class="section-label">' + lbl + '</div>' +
         keyMap[k].map(function(item) { return rowHTML(item.node, item.depth, item.flat); }).join('');
     }).join('');
-  } else {
-    var html = activeTab === 'today' ? `<div class="section-label">${TODAYLABEL}</div>` : '';
-    html += list.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
-    if (activeTab === 'today') html += `<div style="padding:10px 14px;"><button class="add-root-btn" onclick="addTodayTask()" style="font-size:12px;padding:6px 14px;">+ New task</button></div>`;
+  } else if (activeTab === 'today') {
+    var todayItems = list.filter(function(item) { return !item.node.watching; });
+    var watchedItems = list.filter(function(item) { return item.node.watching; });
+    var html = `<div class="section-label">${TODAYLABEL}</div>`;
+    if (todayItems.length) {
+      html += todayItems.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+    } else {
+      html += '<div class="empty" style="padding:18px 16px;">No active tasks for today.</div>';
+    }
+    html += `<div style="padding:10px 14px;"><button class="add-root-btn" onclick="addTodayTask()" style="font-size:12px;padding:6px 14px;">+ New task</button></div>`;
+    if (showWatchedToday && watchedItems.length) {
+      html += '<div class="section-label">Watching</div>' +
+        watchedItems.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+    }
     el.innerHTML = html;
+  } else {
+    el.innerHTML = list.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
   }
 
   attachEvents();
