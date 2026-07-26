@@ -55,6 +55,9 @@
   .tab { flex: 1; padding: 9px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; }
   .tab.active { color: var(--text); border-bottom-color: var(--accent); }
   .tab:hover:not(.active) { background: var(--bg2); color: var(--text); }
+  .today-options { display: flex; align-items: center; justify-content: flex-end; padding: 5px 14px; border-bottom: 0.5px solid var(--border); background: var(--bg); flex-shrink: 0; }
+  .today-watch-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text2); font-size: 11px; cursor: pointer; user-select: none; }
+  .today-watch-toggle input { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
   /* Tree */
   .tree { flex: 1; overflow-y: auto; padding: 4px 0 60px; }
   .tree.drag-selecting { user-select: none; }
@@ -147,7 +150,7 @@
 
   .sel-btn { cursor: pointer; color: var(--text3); font-size: 12px; padding: 0 3px; flex-shrink: 0; opacity: 0; user-select: none; align-self: flex-start; margin-top: 3px; }
   .node-row:hover .sel-btn { opacity: 1; }
-  .node-row.selected .sel-btn { opacity: 1; color: var(--accent); content: '●'; }
+  .node-row.selected .sel-btn { opacity: 1; color: var(--accent); content: 'â—'; }
   .drag-handle { cursor: grab; color: var(--text3); font-size: 14px; padding: 0 4px 0 2px; flex-shrink: 0; opacity: 0; user-select: none; align-self: flex-start; margin-top: 2px; }
   .node-row:hover .drag-handle { opacity: 1; }
   .drag-handle:active { cursor: grabbing; }
@@ -188,8 +191,8 @@
   .search-nav-btn:hover { color: var(--text); background: var(--bg2); }
   .search-active-row { background: color-mix(in srgb, var(--accent) 12%, transparent) !important; outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: -1px; border-radius: 4px; }
 
-  /* ── Mobile ─────────────────────────────────────────────────────────────── */
-  /* Mobile styles — applied via JS .is-mobile class on <html> */
+  /* â”€â”€ Mobile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* Mobile styles â€” applied via JS .is-mobile class on <html> */
   .is-mobile body { padding: 0; background: var(--bg); margin: 0; width: 100%; height: 100%; overflow: hidden; }
   .is-mobile .app { height: 100dvh; min-height: 100vh; max-width: 100%; border-radius: 0; border: none; box-shadow: none; width: 100%; }
   .is-mobile .toolbar { padding: 0 10px; height: 44px; }
@@ -247,7 +250,7 @@
     .modal { width: 100%; border-radius: 16px 16px 0 0; padding: 20px 20px 32px; }
   }
 
-  /* Bottom nav — hidden by default, shown on mobile */
+  /* Bottom nav â€” hidden by default, shown on mobile */
   .mobile-nav {
     display: none;
     flex-shrink: 0;
@@ -269,7 +272,7 @@
   .mobile-nav-btn.active { color: var(--accent); }
   .mobile-nav-btn.active svg { stroke-width: 2.5; }
 
-  /* FAB — hidden by default, shown on mobile */
+  /* FAB â€” hidden by default, shown on mobile */
   .mobile-fab {
     display: none;
     position: absolute;
@@ -336,38 +339,38 @@
   <div class="toolbar">
     <div id="hintBar" class="hint-bar">
       <span class="kbd">Enter</span> new &nbsp;
-      <span class="kbd">⌘↩</span> move/assign &nbsp;
+      <span class="kbd">âŒ˜â†©</span> move/assign &nbsp;
       <span class="kbd">Tab</span> indent &nbsp;
-      <span class="kbd">⇧Tab</span> outdent &nbsp;
-      <span class="kbd">⌘⇧S</span> section &nbsp;
-      <span class="kbd">⌘⇧X</span> today &nbsp;
+      <span class="kbd">â‡§Tab</span> outdent &nbsp;
+      <span class="kbd">âŒ˜â‡§S</span> section &nbsp;
+      <span class="kbd">âŒ˜â‡§X</span> today &nbsp;
       <span class="kbd">/</span> search &nbsp;
-      <span class="kbd">⌘B/I/U</span> format
+      <span class="kbd">âŒ˜B/I/U</span> format
     </div>
     <div id="selectBar" style="display:none;align-items:center;gap:4px;flex-shrink:0;">
       <span id="selectCount" style="font-size:11px;color:var(--text2);padding:2px 4px;white-space:nowrap;"></span>
       <button onclick="bulkAssign()" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text);">Assign</button>
       <button onclick="bulkShare()" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text);">Share</button>
       <button onclick="bulkMove()" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text);">Move</button>
-      <button onclick="clearSelection();selectionMode=false;" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text2);">✕ Deselect</button>
+      <button onclick="clearSelection();selectionMode=false;" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text2);">âœ• Deselect</button>
     </div>
     <span id="userAvatar" onclick="switchUser()" title="Click to switch user" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--text3);color:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:background 0.3s;">?</span>
     <span class="user-pill" id="userPill" style="display:none;"></span>
     <span class="sync-dot" id="syncDot" style="display:none;"></span>
-    <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)">↩</button>
-    <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)">↪</button>
+    <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)">â†©</button>
+    <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)">â†ª</button>
     <button id="collapseBtn">Collapse all</button>
     <button id="hideDoneBtn" onclick="toggleHideDone()" title="Toggle visibility of completed tasks">Hide done</button>
-    <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)" class="desktop-only">⌕ Search</button>
-    <button onclick="claimOwnership()" id="claimBtn" title="Claim ownership of all unowned nodes" style="display:none">⚑ Claim</button>
+    <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)" class="desktop-only">âŒ• Search</button>
+    <button onclick="claimOwnership()" id="claimBtn" title="Claim ownership of all unowned nodes" style="display:none">âš‘ Claim</button>
   </div>
   <div class="search-bar hidden" id="searchBar">
-    <span class="search-icon">⌕</span>
-    <input class="search-input" id="searchInput" placeholder="Search tasks, sections, projects…" autocomplete="off" spellcheck="false" />
+    <span class="search-icon">âŒ•</span>
+    <input class="search-input" id="searchInput" placeholder="Search tasks, sections, projectsâ€¦" autocomplete="off" spellcheck="false" />
     <span class="search-count" id="searchCount"></span>
-    <button class="search-nav-btn" id="searchPrev" title="Previous result (↑)">↑</button>
-    <button class="search-nav-btn" id="searchNext" title="Next result (↓)">↓</button>
-    <button class="search-clear" id="searchClear" title="Clear search (Esc)">✕</button>
+    <button class="search-nav-btn" id="searchPrev" title="Previous result (â†‘)">â†‘</button>
+    <button class="search-nav-btn" id="searchNext" title="Next result (â†“)">â†“</button>
+    <button class="search-clear" id="searchClear" title="Clear search (Esc)">âœ•</button>
   </div>
   <div class="tabs">
     <button class="tab active" data-tab="today">Today</button>
@@ -375,20 +378,26 @@
     <button class="tab" data-tab="tree">Projects</button>
     <button class="tab" data-tab="assigned">Assigned to me</button>
   </div>
+  <div class="today-options" id="todayOptions">
+    <label class="today-watch-toggle" title="Include Done &amp; Watch items in Today">
+      <input type="checkbox" id="showWatchedTodayToggle" onchange="toggleShowWatchedToday(this.checked)" />
+      <span>Show watched</span>
+    </label>
+  </div>
   <div id="zoomCrumb" style="display:none;padding:6px 14px;font-size:11px;color:var(--text2);background:var(--bg2);border-bottom:0.5px solid var(--border);flex-shrink:0;"></div>
-  <div id="treeEl" class="tree"><div class="empty">Loading…</div></div>
+  <div id="treeEl" class="tree"><div class="empty">Loadingâ€¦</div></div>
 
-  <!-- Keyboard accessory bar — inside flex column, shows above nav when editing -->
+  <!-- Keyboard accessory bar â€” inside flex column, shows above nav when editing -->
   <div class="kb-bar" id="kbBar">
-    <button class="kb-btn" id="kbIndent" title="Indent (Tab)">⇥</button>
-    <button class="kb-btn" id="kbOutdent" title="Outdent (Shift+Tab)">⇤</button>
-    <button class="kb-btn" id="kbUp" title="Move up">↑</button>
-    <button class="kb-btn" id="kbDown" title="Move down">↓</button>
-    <button class="kb-btn" id="kbToday" title="Schedule today">📅</button>
+    <button class="kb-btn" id="kbIndent" title="Indent (Tab)">â‡¥</button>
+    <button class="kb-btn" id="kbOutdent" title="Outdent (Shift+Tab)">â‡¤</button>
+    <button class="kb-btn" id="kbUp" title="Move up">â†‘</button>
+    <button class="kb-btn" id="kbDown" title="Move down">â†“</button>
+    <button class="kb-btn" id="kbToday" title="Schedule today">ðŸ“…</button>
     <button class="kb-btn kb-btn-wide kb-btn-primary" id="kbDone" title="Done editing">Done</button>
   </div>
 
-  <!-- Mobile bottom navigation — inside .app so it sits in the flex column -->
+  <!-- Mobile bottom navigation â€” inside .app so it sits in the flex column -->
   <nav class="mobile-nav" id="mobileNav">
     <div class="mobile-nav-inner">
       <button class="mobile-nav-btn active" data-tab="today" id="mnav-today">
@@ -414,18 +423,18 @@
     </div>
   </nav>
 
-  <!-- Mobile FAB — absolute inside .app -->
+  <!-- Mobile FAB â€” absolute inside .app -->
   <button class="mobile-fab" id="mobileFab" onclick="mobileAddItem()">+</button>
 </div>
 
 
 <script>
-// ── Config ───────────────────────────────────────────────────────────────────
+// â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var COLLAPSED_KEY = 'momentum_collapsed';
 var TODAY = (() => { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
 var TODAYLABEL = new Date().toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
 
-// ── Diagnostic logger ────────────────────────────────────────────────────────
+// â”€â”€ Diagnostic logger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Filter console for "MOM" to see only Momentum logs.
 function mlog() {
   var args = Array.prototype.slice.call(arguments);
@@ -450,7 +459,7 @@ var collapsed = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}');
 var activeTab = 'today';
 var focusId = null;
 
-// ── Utilities ────────────────────────────────────────────────────────────────
+// â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function newId() { return '_' + Math.random().toString(36).substr(2, 7); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function localDateTime() {
@@ -464,9 +473,9 @@ function localDateTime() {
 }
 function saveCollapsed() { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed)); }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // LOCAL-FIRST SYNC ENGINE
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Design:
 //   - Local state (nodes[]) is the source of truth.
 //   - All mutations go into queueState (saves Map + deletes Set), persisted to
@@ -475,22 +484,22 @@ function saveCollapsed() { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(co
 //   - Only one batch in flight at a time (single-flight). Subsequent mutations
 //     queue up and ship in the next batch.
 //   - On batch failure: per-item failures are re-queued. Whole-request failures
-//     trigger exponential backoff (1.5s → 3s → 6s → 12s, capped at 30s).
+//     trigger exponential backoff (1.5s â†’ 3s â†’ 6s â†’ 12s, capped at 30s).
 //   - nodeTouched[id] = timestamp of last user mutation. Reconcile uses this
 //     to refuse server overwrites of recently-edited nodes (5s window).
 //   - opGeneration cancels in-flight batches whose results would clobber the
 //     state after an undo.
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 var QUEUE_KEY = 'momentum_pending_queue';
-var TOUCHED_WINDOW_MS = 5000;       // reconciliation window — local edits younger than this beat server
+var TOUCHED_WINDOW_MS = 5000;       // reconciliation window â€” local edits younger than this beat server
 var FLUSH_DEBOUNCE_MS = 1500;       // wait this long after a mutation before flushing
 var BACKOFF_BASE_MS = 1500;         // initial backoff after a failed batch
 var BACKOFF_MAX_MS = 30000;         // cap
 
 // State
-var queueState = { saves: {}, deletes: {} };  // saves: id → snapshot, deletes: id → true
-var nodeTouched = {};                          // id → timestamp ms
+var queueState = { saves: {}, deletes: {} };  // saves: id â†’ snapshot, deletes: id â†’ true
+var nodeTouched = {};                          // id â†’ timestamp ms
 var flushTimer = null;
 var batchInFlight = false;
 var batchBackoffMs = BACKOFF_BASE_MS;
@@ -498,7 +507,7 @@ var batchGeneration = 0;                       // bumped on undo/redo to invalid
 var suppressBlur = false;                      // legacy: blocks blur saves during render rebuilds
 var recentlySaved = new Set();                 // legacy: kept for code that references it; harmless
 
-// Legacy aliases — many call sites still use these names. They now point at the
+// Legacy aliases â€” many call sites still use these names. They now point at the
 // new system so old code keeps working without churn.
 var pendingSave = {
   add: function(id) { var n = nodes.find(function(x){return x.id===id;}); if (n) queueSave(n); },
@@ -536,7 +545,7 @@ function queueSize() {
   return Object.keys(queueState.saves).length + Object.keys(queueState.deletes).length;
 }
 
-// Update touched timestamp for a node — call this from any keystroke or mutation.
+// Update touched timestamp for a node â€” call this from any keystroke or mutation.
 function touchNode(id) { nodeTouched[id] = Date.now(); }
 
 // Schedule a save: store snapshot in queue, mark touched, arm the flush timer.
@@ -544,7 +553,7 @@ function touchNode(id) { nodeTouched[id] = Date.now(); }
 function queueSave(node) {
   if (!node || !node.id) return;
   if (!node.name || !node.name.trim()) return;     // never save nameless nodes
-  // If this id is queued for delete, the delete wins — saves on a deleted id
+  // If this id is queued for delete, the delete wins â€” saves on a deleted id
   // would resurrect it. Skip the save.
   if (queueState.deletes[node.id]) return;
   queueState.saves[node.id] = Object.assign({}, node);
@@ -601,7 +610,7 @@ function updateQueueBanner() {
     if (queueBannerTimer) { clearTimeout(queueBannerTimer); queueBannerTimer = null; }
     return;
   }
-  // Don't flash for normal short flushes — only show after a delay
+  // Don't flash for normal short flushes â€” only show after a delay
   if (!queueBannerTimer) {
     queueBannerTimer = setTimeout(function() {
       queueBannerTimer = null;
@@ -616,7 +625,7 @@ function updateQueueBanner() {
         el.onclick = function() { flushBatch(true); };
         document.body.appendChild(el);
       }
-      el.textContent = sz + ' unsaved change' + (sz === 1 ? '' : 's') + ' — syncing…';
+      el.textContent = sz + ' unsaved change' + (sz === 1 ? '' : 's') + ' â€” syncingâ€¦';
       el.style.display = 'block';
     }, 5000);
   }
@@ -702,7 +711,7 @@ function flushBatch(force) {
     });
 }
 
-// Public: flush everything synchronously (well, as fast as possible) — used
+// Public: flush everything synchronously (well, as fast as possible) â€” used
 // before showing login screen so unsaved work makes it to the server.
 // Returns a promise that resolves when queue is empty or after timeoutMs.
 function flushNow(timeoutMs) {
@@ -726,9 +735,9 @@ function bumpGeneration() {
   opGeneration = batchGeneration; // legacy alias
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // END SYNC ENGINE
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 // Fetch server state and reconcile with local. Does NOT clobber:
 //   - Nodes with pending saves or deletes in the queue
@@ -749,14 +758,14 @@ async function fetchAll(initial) {
   if (avatar && currentUser) {
     avatar.textContent = currentUser[0].toUpperCase();
     avatar.style.background = 'var(--accent)';
-    avatar.title = currentUser + ' — click to sign out';
+    avatar.title = currentUser + ' â€” click to sign out';
   }
 
   var serverNodes = normalizeNodes(data.nodes || []);
   gsr('getTeamMembers').then(function(members) { teamMembers = members || []; }).catch(function(){});
 
   if (initial) {
-    // Fresh boot — no local state worth preserving. Just load server state.
+    // Fresh boot â€” no local state worth preserving. Just load server state.
     nodes = serverNodes;
   } else {
     // Reconcile: merge server state with protected local state.
@@ -772,7 +781,7 @@ async function fetchAll(initial) {
     serverNodes.forEach(function(sn) {
       var local = localById[sn.id];
       if (!local) {
-        // New on server, not yet known locally — take it (unless it's queued for delete)
+        // New on server, not yet known locally â€” take it (unless it's queued for delete)
         if (!queueState.deletes[sn.id]) merged.push(sn);
         return;
       }
@@ -787,7 +796,7 @@ async function fetchAll(initial) {
     });
 
     // Also include any local-only nodes that aren't on the server yet
-    // (newly-created, not-yet-saved nodes) — unless they're queued for delete
+    // (newly-created, not-yet-saved nodes) â€” unless they're queued for delete
     nodes.forEach(function(ln) {
       if (!serverById[ln.id] && !queueState.deletes[ln.id]) {
         // But NOT if the server just deleted it and enough time has passed
@@ -810,11 +819,11 @@ async function fetchAll(initial) {
   render(!initial); // preserve scroll on reconciliation fetches
 }
 
-// ── PWA Config — fill these in ───────────────────────────────────────────────
+// â”€â”€ PWA Config â€” fill these in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxWSPqbUuKMS0YceLzG2Khz6wwCJYO_ZJtU5l3q51Wgc6oT1nD7Z1XH7oz_J7S5ubx7/exec';
 var GOOGLE_CLIENT_ID = '751338704263-1iso4ep0be9brhic463uc4ogkst6en2g.apps.googleusercontent.com';
 
-// ── Auth state ────────────────────────────────────────────────────────────────
+// â”€â”€ Auth state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
 var _tokenExpiry = parseInt(localStorage.getItem('momentum_token_expiry') || '0');
 var _tokenRefreshTimer = null;
@@ -837,7 +846,7 @@ function scheduleTokenRefresh() {
   }, delay);
 }
 
-// Silent token refresh — reuses the existing Google session, no popup
+// Silent token refresh â€” reuses the existing Google session, no popup
 function silentRefreshToken() {
   if (_silentRefreshPromise) { mlog('silentRefreshToken: dedup, in-flight'); return _silentRefreshPromise; }
   mlog('silentRefreshToken: starting. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
@@ -856,7 +865,7 @@ function silentRefreshToken() {
       var client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile',
-        prompt: 'none',       // truly silent — no UI at all
+        prompt: 'none',       // truly silent â€” no UI at all
         login_hint: hint,     // skip account chooser
         callback: function(response) {
           _silentRefreshPromise = null;
@@ -976,18 +985,18 @@ function showApp() {
   if (a) a.style.visibility = '';
 }
 
-// ── API call — replaces google.script.run ─────────────────────────────────────
+// â”€â”€ API call â€” replaces google.script.run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function gsr(fnName, arg) {
   return new Promise(function(resolve, reject) {
     var valid = isTokenValid();
     mlog('gsr:', fnName, 'tokenValid?', valid, 'token?', !!_googleAccessToken);
     if (!valid) {
-      mlog('gsr:', fnName, '→ token invalid, attempting silent refresh');
+      mlog('gsr:', fnName, 'â†’ token invalid, attempting silent refresh');
       silentRefreshWithRetry(3).then(function() {
-        mlog('gsr:', fnName, '→ silent refresh succeeded, retrying call');
+        mlog('gsr:', fnName, 'â†’ silent refresh succeeded, retrying call');
         gsr(fnName, arg).then(resolve).catch(reject);
       }).catch(function(e) {
-        mwarn('gsr:', fnName, '→ silent refresh failed:', e && e.message, 'fatal=', e && e.fatal);
+        mwarn('gsr:', fnName, 'â†’ silent refresh failed:', e && e.message, 'fatal=', e && e.fatal);
         if (e && e.fatal) {
           handleAuthFailure();
           reject(new Error('Not authenticated'));
@@ -997,7 +1006,7 @@ function gsr(fnName, arg) {
       });
       return;
     }
-    mlog('gsr:', fnName, '→ POST to', APPS_SCRIPT_URL.slice(-30));
+    mlog('gsr:', fnName, 'â†’ POST to', APPS_SCRIPT_URL.slice(-30));
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       redirect: 'follow',
@@ -1010,23 +1019,23 @@ function gsr(fnName, arg) {
       })
     })
     .then(function(r) {
-      mlog('gsr:', fnName, '→ HTTP', r.status, r.ok ? 'OK' : 'NOT OK');
+      mlog('gsr:', fnName, 'â†’ HTTP', r.status, r.ok ? 'OK' : 'NOT OK');
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     })
     .then(function(text) {
-      mlog('gsr:', fnName, '→ response body length', text.length, 'preview:', text.slice(0, 80));
+      mlog('gsr:', fnName, 'â†’ response body length', text.length, 'preview:', text.slice(0, 80));
       var data;
       try { data = JSON.parse(text); } catch(e) {
         console.error('Non-JSON response:', text.slice(0, 200));
         throw new Error('Server returned non-JSON response');
       }
       if (data && data.error === 'Unauthorized') {
-        mwarn('gsr:', fnName, '→ server says Unauthorized, trying silent refresh + retry');
+        mwarn('gsr:', fnName, 'â†’ server says Unauthorized, trying silent refresh + retry');
         silentRefreshWithRetry(3).then(function() {
           gsr(fnName, arg).then(resolve).catch(reject);
         }).catch(function(e) {
-          mwarn('gsr:', fnName, '→ refresh after Unauthorized failed:', e && e.message);
+          mwarn('gsr:', fnName, 'â†’ refresh after Unauthorized failed:', e && e.message);
           if (e && e.fatal) {
             handleAuthFailure();
             reject(new Error('Unauthorized'));
@@ -1036,26 +1045,26 @@ function gsr(fnName, arg) {
         });
         return;
       }
-      if (data && data.error) { mwarn('gsr:', fnName, '→ server error:', data.error); reject(new Error(data.error)); return; }
-      mlog('gsr:', fnName, '→ success');
+      if (data && data.error) { mwarn('gsr:', fnName, 'â†’ server error:', data.error); reject(new Error(data.error)); return; }
+      mlog('gsr:', fnName, 'â†’ success');
       resolve(data);
     })
     .catch(function(err) {
-      merror('gsr:', fnName, '→ FETCH FAILED:', err && err.message, err);
+      merror('gsr:', fnName, 'â†’ FETCH FAILED:', err && err.message, err);
       reject(err);
     });
   });
 }
 
 // Called when auth fails fatally (user action required).
-// Try to get pending work to the server before showing login — our batch
+// Try to get pending work to the server before showing login â€” our batch
 // persists across logins in localStorage anyway, but every second of delay
 // matters because the user might close the tab.
 function handleAuthFailure() {
   var errEl = document.getElementById('signinError');
   if (errEl && queueSize() > 0) {
     errEl.textContent = queueSize() + ' unsaved change' + (queueSize() === 1 ? '' : 's') +
-      ' — please sign in to save.';
+      ' â€” please sign in to save.';
     errEl.style.display = 'block';
   } else if (errEl) {
     errEl.style.display = 'block';
@@ -1071,7 +1080,7 @@ function getDescendantIds(id) {
   return nodes.filter(n => n.parentId === id).flatMap(c => [c.id, ...getDescendantIds(c.id)]);
 }
 
-// ── Node helpers ──────────────────────────────────────────────────────────────
+// â”€â”€ Node helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function normalizeNodes(raw) {
   return raw
     .filter(n => n.name && String(n.name).trim() !== '')
@@ -1099,7 +1108,7 @@ function ancestors(id) {
   while (n && n.parentId) { n = nodes.find(x => x.id === n.parentId); if (n) a.unshift(n); }
   return a;
 }
-function breadcrumb(id) { return ancestors(id).map(n => n.name || '…').join(' › '); }
+function breadcrumb(id) { return ancestors(id).map(n => n.name || 'â€¦').join(' â€º '); }
 function flattenVisible(pid, depth) {
   return children(pid).flatMap(n => {
     // In tree view, hide done nodes if hideDone (except done today, and except
@@ -1124,13 +1133,19 @@ function visibleList() {
     // Watched tasks act as completed, but remain visible in All Tasks under
     // their dedicated Watching section even when Hide Done is enabled.
     if (activeTab === 'all' && n.watching) return true;
+    if (activeTab === 'today' && showWatchedToday && n.watching) return true;
     if (!hideDone) return true;
     if (!n.done) return true;
     // Show done tasks completed today
     var completedOn = n.completedDate || (n.date ? n.date.slice(0,10) : null);
     return completedOn === TODAY;
   };
-  if (activeTab === 'today') tasks = nodes.filter(n => !n.isSection && !n.watching && n.date && n.date.slice(0,10) === TODAY && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
+  if (activeTab === 'today') tasks = nodes.filter(n =>
+    !n.isSection &&
+    ((!n.watching && n.date && n.date.slice(0,10) === TODAY) || (showWatchedToday && n.watching)) &&
+    (n.name && n.name.trim() || n.id === focusId) &&
+    doneFilter(n)
+  );
   else if (activeTab === 'all') tasks = nodes.filter(n => !n.isSection && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
   tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -1159,7 +1174,7 @@ function visibleList() {
   tasks.forEach(function(n) {
     if (seen.has(n.id)) return; // already rendered as a child
     // If this node's parent is also in the task set it will be rendered
-    // under its parent when that parent is processed — skip it here
+    // under its parent when that parent is processed â€” skip it here
     if (n.parentId && taskSet.has(n.parentId) && !(activeTab === 'all' && n.watching)) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
@@ -1168,10 +1183,14 @@ function visibleList() {
 function isOwner(n) { return !n.owner || n.owner === '' || n.owner === currentUser; }
 function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo === currentUser); }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function render(preserveScroll) {
   var el = document.getElementById('treeEl');
   if (!el) return;
+  var todayOptions = document.getElementById('todayOptions');
+  if (todayOptions) todayOptions.style.display = activeTab === 'today' ? 'flex' : 'none';
+  var watchedToggle = document.getElementById('showWatchedTodayToggle');
+  if (watchedToggle) watchedToggle.checked = showWatchedToday;
   var savedScroll = preserveScroll ? el.scrollTop : 0;
 
   // If search is open with a query, show search results instead
@@ -1268,7 +1287,7 @@ function render(preserveScroll) {
   }
 }
 
-// ── Formatting helpers ────────────────────────────────────────────────────────
+// â”€â”€ Formatting helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderMarkdown(text) {
   if (!text) return '';
   // Escape HTML first, then apply formatting markers
@@ -1340,7 +1359,7 @@ function switchToDisplay(inp, displayEl) {
 function rowHTML(n, depth, flat = false) {
   var ch = children(n.id);
   var indentPx = 8 + depth * 22;
-  // Build vertical indent guide lines — one per ancestor level
+  // Build vertical indent guide lines â€” one per ancestor level
   // Each line sits at the toggle x-position for that depth: 8 + d*22 + 10px (center of toggle)
   var guides = '';
   if (!flat && depth > 0) {
@@ -1349,9 +1368,9 @@ function rowHTML(n, depth, flat = false) {
       guides += '<span class="indent-guide" style="left:' + lineX + 'px;"></span>';
     }
   }
-  var leafSpan = flat ? '<span class="toggle leaf">◦</span>' : '<span class="toggle leaf zoomable" data-zoom="' + n.id + '" title="Zoom in">◦</span>';
-  var toggleEl = flat ? '<span class="toggle leaf">◦</span>'
-    : ch.length ? `<span class="toggle" data-toggle="${n.id}">${collapsed[n.id] ? '▶' : '▼'}</span>` + (!n.isSection && !flat ? '<span class="zoom-dot zoomable" data-zoom="' + n.id + '" title="Zoom in">◦</span>' : '')
+  var leafSpan = flat ? '<span class="toggle leaf">â—¦</span>' : '<span class="toggle leaf zoomable" data-zoom="' + n.id + '" title="Zoom in">â—¦</span>';
+  var toggleEl = flat ? '<span class="toggle leaf">â—¦</span>'
+    : ch.length ? `<span class="toggle" data-toggle="${n.id}">${collapsed[n.id] ? 'â–¶' : 'â–¼'}</span>` + (!n.isSection && !flat ? '<span class="zoom-dot zoomable" data-zoom="' + n.id + '" title="Zoom in">â—¦</span>' : '')
     : leafSpan;
   var markerEl = n.isSection
     ? '<span class="section-icon" data-iconid="' + n.id + '"' + (!flat ? ' data-pickicon="' + n.id + '"' : '') + ' title="Click to change icon">' + renderSectionIcon(n.id, n.name) + '</span>'
@@ -1362,11 +1381,11 @@ function rowHTML(n, depth, flat = false) {
   var displayContent = n.name ? renderMarkdown(n.name) : '<span style="color:var(--text3);font-style:italic;">' + placeholder + '</span>';
   var inputEl = '<div class="' + dispCls + '" id="disp_' + n.id + '" data-disp="' + n.id + '">' + displayContent + '</div>' +
     '<textarea class="' + cls + '" id="inp_' + n.id + '" data-id="' + n.id + '" data-flat="' + flat + '" ' + (!canEdit(n) ? 'readonly' : '') + ' placeholder="' + placeholder + '" rows="1">' + esc(n.name) + '</textarea>' +
-    '<button class="mobile-show-more" data-showmore="' + n.id + '" title="Show full text">···</button>';
+    '<button class="mobile-show-more" data-showmore="' + n.id + '" title="Show full text">Â·Â·Â·</button>';
 
   var meta = '';
   if (flat) {
-    // Only show breadcrumb for root-level flat nodes — children have their parent visible above them
+    // Only show breadcrumb for root-level flat nodes â€” children have their parent visible above them
     if (depth === 0) {
       var bc = breadcrumb(n.id);
       if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
@@ -1375,24 +1394,24 @@ function rowHTML(n, depth, flat = false) {
     var isToday = nd === TODAY;
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
     else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
-    meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
+    meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : 'â€”') + '</span>';
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
     var isToday2 = nd2 === TODAY;
     if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
-    meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>' + meta;
+    meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : 'â€”') + '</span>' + meta;
   }
-  if (n.watching) meta = '<span class="watch-badge" title="Done &amp; watching">👁</span>' + meta;
+  if (n.watching) meta = '<span class="watch-badge" title="Done &amp; watching">ðŸ‘</span>' + meta;
 
   var acts = '';
   if (canEdit(n)) {
-    if (!n.isSection) acts += `<button class="act-btn${n.watching ? ' watching' : ''}" data-watch="${n.id}" title="${n.watching ? 'Stop watching' : 'Done & watch'}">👁</button>`;
-    acts += `<button class="act-btn" data-toggletype="${n.id}">${n.isSection ? '→ task' : '→ section'}</button>`;
-    if (!n.isSection) acts += `<button class="act-btn" data-promote="${n.id}">↑ today</button>`;
+    if (!n.isSection) acts += `<button class="act-btn${n.watching ? ' watching' : ''}" data-watch="${n.id}" title="${n.watching ? 'Stop watching' : 'Done & watch'}">ðŸ‘</button>`;
+    acts += `<button class="act-btn" data-toggletype="${n.id}">${n.isSection ? 'â†’ task' : 'â†’ section'}</button>`;
+    if (!n.isSection) acts += `<button class="act-btn" data-promote="${n.id}">â†‘ today</button>`;
     if (isOwner(n)) {
       acts += `<button class="act-btn" data-share="${n.id}">share</button>`;
       if (!n.isSection) acts += `<button class="act-btn" data-assign="${n.id}">assign</button>`;
-      acts += `<button class="act-btn" data-del="${n.id}">✕</button>`;
+      acts += `<button class="act-btn" data-del="${n.id}">âœ•</button>`;
     }
   }
 
@@ -1401,11 +1420,11 @@ function rowHTML(n, depth, flat = false) {
     n.assignedTo === currentUser && n.assignedBy ? 'assigned-to-me' : '',
     n.assignedBy === currentUser && n.assignedTo !== currentUser ? 'assigned-by-me' : ''
   ].filter(Boolean).join(' ');
-  var selState = selectedIds.has(n.id) ? '●' : '○';
-  var dragHandle = '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
-  var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
-  var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
-  var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">⋯</button>' : '';
+  var selState = selectedIds.has(n.id) ? 'â—' : 'â—‹';
+  var dragHandle = '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">â ¿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
+  var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? 'â–¶' : 'â–¼') + '</span>' : '';
+  var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">âŠ™</span>' : '';
+  var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">â‹¯</button>' : '';
   return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileMenu}${mobileZoom}${mobileToggle}</div>`;
 }
 
@@ -1434,7 +1453,7 @@ function attachEvents() {
       if (disp) {
         if (disp.classList.contains('expanded')) {
           disp.classList.remove('expanded');
-          btn.textContent = '···';
+          btn.textContent = 'Â·Â·Â·';
         } else {
           disp.classList.add('expanded');
           btn.textContent = 'less';
@@ -1602,7 +1621,7 @@ function attachEvents() {
   });
   el.querySelectorAll('[data-share]').forEach(b => b.onclick = e => { e.stopPropagation(); showShare(b.dataset.share); });
   el.querySelectorAll('[data-assign]').forEach(b => b.onclick = e => { e.stopPropagation(); showAssign(b.dataset.assign); });
-  // Wire display divs — click to enter edit mode
+  // Wire display divs â€” click to enter edit mode
   el.querySelectorAll('[data-disp]').forEach(function(disp) {
     var id = disp.dataset.disp;
     disp.onclick = function(e) {
@@ -1671,7 +1690,7 @@ function attachEvents() {
       initKbBar();
     };
     inp.onkeydown = e => {
-      // ── Formatting shortcuts ────────────────────────────────
+      // â”€â”€ Formatting shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         if (e.key === 'b' || e.key === 'B') { e.preventDefault(); applyFormat(inp, '**'); return; }
         if (e.key === 'i' || e.key === 'I') { e.preventDefault(); applyFormat(inp, '_'); return; }
@@ -1679,7 +1698,7 @@ function attachEvents() {
       }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
         if (e.key === 'x' || e.key === 'X') {
-          // Ctrl+Shift+X is "promote to today", not strikethrough — skip formatting
+          // Ctrl+Shift+X is "promote to today", not strikethrough â€” skip formatting
         } else if (e.key === '5') { e.preventDefault(); applyFormat(inp, '~~'); return; }
       }
       handleKey(e, inp);
@@ -1697,12 +1716,12 @@ function handleKey(e, inp) {
   var list = visibleList();
   var vi = list.findIndex(x => x.node.id === id);
 
-  // ── Escape ──────────────────────────────────────────────────
+  // â”€â”€ Escape â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (e.key === 'Escape') { inp.blur(); return; }
 
-  // ── Enter ────────────────────────────────────────────────────
-  // Expanded node with children → new first child (directly below)
-  // Collapsed node or leaf → new sibling (after the block)
+  // â”€â”€ Enter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Expanded node with children â†’ new first child (directly below)
+  // Collapsed node or leaf â†’ new sibling (after the block)
   // Ctrl+Enter (any view): open section/assignee picker for current node
   if (e.key === 'Enter' && !e.shiftKey && !e.repeat && (e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
@@ -1732,8 +1751,8 @@ function handleKey(e, inp) {
   }
 
   // Flat view Enter:
-  //   depth 0 (root task) → new flat task with today's date (current behaviour)
-  //   depth > 0 (child)   → new tree sibling after descendants, same parentId, inherits date
+  //   depth 0 (root task) â†’ new flat task with today's date (current behaviour)
+  //   depth > 0 (child)   â†’ new tree sibling after descendants, same parentId, inherits date
   if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey && (inp.dataset.flat === 'true' || inp.dataset.flat === true)) {
     e.preventDefault();
     pushUndo();
@@ -1751,7 +1770,7 @@ function handleKey(e, inp) {
     var currentDepth = vi > -1 ? (list[vi].depth || 0) : 0;
     var nn;
     if (currentDepth === 0) {
-      // Root flat node — new task with today's date under the picked section
+      // Root flat node â€” new task with today's date under the picked section
       nn = {
         id: newId(), name: '',
         parentId: lastPickedSection || cur.parentId || null,
@@ -1763,7 +1782,7 @@ function handleKey(e, inp) {
         order: orderBetween(insertAt - 1, insertAt)
       };
     } else {
-      // Child node — tree sibling, same parentId, inherit date so it stays visible
+      // Child node â€” tree sibling, same parentId, inherit date so it stays visible
       nn = {
         id: newId(), name: '',
         parentId: cur.parentId || null,
@@ -1779,7 +1798,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Shift+Enter: new tree sibling below current node (all views) ─────────
+  // â”€â”€ Shift+Enter: new tree sibling below current node (all views) â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Inserts after the current node and all its descendants, preserving parentId.
   if (e.key === 'Enter' && e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
@@ -1809,7 +1828,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Tree-mode Enter: new child (if expanded) or sibling (if collapsed/leaf) ─
+  // â”€â”€ Tree-mode Enter: new child (if expanded) or sibling (if collapsed/leaf) â”€
   if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
     pushUndo();
@@ -1850,7 +1869,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Backspace on empty: delete node ─────────────────────────
+  // â”€â”€ Backspace on empty: delete node â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (e.key === 'Backspace' && inp.value === '') {
     e.preventDefault();
     pushUndo();
@@ -1863,7 +1882,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Arrow keys: navigate ─────────────────────────────────────
+  // â”€â”€ Arrow keys: navigate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (e.key === 'ArrowUp') {
     e.preventDefault();
     cur.name = inp.value;
@@ -1879,8 +1898,8 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Tab: indent (make child of node above at same level) ─────
-  // Disabled in flat views (Today / All Tasks / Assigned) — tree only
+  // â”€â”€ Tab: indent (make child of node above at same level) â”€â”€â”€â”€â”€
+  // Disabled in flat views (Today / All Tasks / Assigned) â€” tree only
   if (e.key === 'Tab' && !e.shiftKey) {
     if (inp.dataset.flat === 'true') return; // let browser handle Tab in flat views
     e.preventDefault();
@@ -1913,7 +1932,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Shift+Tab: outdent ───────────────────────────────────────
+  // â”€â”€ Shift+Tab: outdent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (e.key === 'Tab' && e.shiftKey) {
     if (inp.dataset.flat === 'true') return;
     e.preventDefault();
@@ -1940,14 +1959,14 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Ctrl+Shift+X: toggle today ───────────────────────────────
+  // â”€â”€ Ctrl+Shift+X: toggle today â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
     e.preventDefault();
     if (!cur.isSection) {
       pushUndo();
       cur.name = inp.value.trim() || cur.name;
       if (cur.date && cur.date.slice(0, 10) === TODAY) {
-        // Already today — demote to yesterday
+        // Already today â€” demote to yesterday
         var yest = new Date();
         yest.setDate(yest.getDate() - 1);
         cur.date = yest.getFullYear() + '-' +
@@ -1962,7 +1981,7 @@ function handleKey(e, inp) {
     return;
   }
 
-  // ── Ctrl+Shift+S: toggle section ────────────────────────────
+  // â”€â”€ Ctrl+Shift+S: toggle section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'S') {
     e.preventDefault();
     pushUndo();
@@ -2051,7 +2070,7 @@ function collapseAll() {
   saveCollapsed(); render(true);
 }
 
-// ── Bulk actions (multi-select) ───────────────────────────────────────────────
+// â”€â”€ Bulk actions (multi-select) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function bulkAssign() {
   if (!selectedIds.size) return;
   var ids = [...selectedIds];
@@ -2075,7 +2094,7 @@ function bulkAssign() {
 
   function buildList() {
     var html = '<div class="basg-row" data-email="" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--text3);' +
-      (hiEmail === null ? 'background:var(--accent);color:var(--bg);' : '') + '">· No assignee</div>';
+      (hiEmail === null ? 'background:var(--accent);color:var(--bg);' : '') + '">Â· No assignee</div>';
     users.forEach(function(u) {
       var email = u.email || u;
       var name = u.name || email.split('@')[0];
@@ -2089,7 +2108,7 @@ function bulkAssign() {
 
   overlay.innerHTML =
     '<div style="background:var(--bg);border-radius:12px;border:0.5px solid var(--border2);width:340px;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.15);">' +
-      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid var(--border);">Assign ' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + ' to…</div>' +
+      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid var(--border);">Assign ' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + ' toâ€¦</div>' +
       '<div id="basgList" style="overflow-y:auto;flex:1;padding:4px 0;"></div>' +
       '<div style="padding:10px 16px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">' +
         '<button id="basgCancel" style="padding:6px 14px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>' +
@@ -2216,7 +2235,7 @@ function bulkMove() {
       var n = item.node;
       var hasChildren = nodes.some(function(c){ return c.parentId===n.id && c.isSection; });
       var isHi = n.id === hiSection;
-      var arrow = hasChildren ? (pickerExpanded[n.id] ? '▼ ' : '▶ ') : '· ';
+      var arrow = hasChildren ? (pickerExpanded[n.id] ? 'â–¼ ' : 'â–¶ ') : 'Â· ';
       return '<div class="bsec-row" data-id="' + n.id + '" style="padding:6px 12px 6px ' + (8+item.depth*16) + 'px;cursor:pointer;font-size:13px;' +
         (isHi ? 'background:var(--accent);color:var(--bg);' : '') + '">' +
         '<span style="font-size:9px;opacity:0.5;">' + arrow + '</span>' + esc(n.name) + '</div>';
@@ -2225,7 +2244,7 @@ function bulkMove() {
 
   overlay.innerHTML =
     '<div style="background:var(--bg);border-radius:12px;border:0.5px solid var(--border2);width:320px;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.15);">' +
-      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid var(--border);">Move ' + ids.length + ' item' + (ids.length>1?'s':'') + ' to section…</div>' +
+      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid var(--border);">Move ' + ids.length + ' item' + (ids.length>1?'s':'') + ' to sectionâ€¦</div>' +
       '<div id="bsecList" style="overflow-y:auto;flex:1;padding:4px 0;"></div>' +
       '<div style="padding:10px 16px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">' +
         '<button id="bsecCancel" style="padding:6px 14px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>' +
@@ -2287,7 +2306,7 @@ function bulkMove() {
 }
 
 
-// ── Drag and Drop (mouse-based, works in Apps Script iframe) ─────────────────
+// â”€â”€ Drag and Drop (mouse-based, works in Apps Script iframe) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var dragId = null;
 var dragOverId = null;
 var dropMode = null;
@@ -2306,18 +2325,19 @@ var assigneeFavourites = JSON.parse(localStorage.getItem('momentum_asg_favs') ||
 var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var hideDone = localStorage.getItem('momentum_hide_done') === 'true';
+var showWatchedToday = localStorage.getItem('momentum_show_watched_today') === 'true';
 var navHistory = []; // stack of {tab, zoomedId} states
 var navIgnoreNext = false; // prevent history push on back navigation // hide completed tasks
 var dragStartY = 0;
 var dragStartX = 0;
 
-// ── Search ────────────────────────────────────────────────────────────────────
+// â”€â”€ Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var searchQuery = '';
 var searchResultIds = [];
 var searchActiveIdx = -1;
 var searchOpen = false;
 
-// ── Section Icons (Lucide SVG) ────────────────────────────────────────────────
+// â”€â”€ Section Icons (Lucide SVG) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var ICON_FORMAT_VERSION = 'lucide-v1'; // bump this to force-clear icon cache
 var sectionIcons = (function() {
   // Force-clear if stored format is old (emoji era)
@@ -2329,10 +2349,10 @@ var sectionIcons = (function() {
   return JSON.parse(localStorage.getItem('momentum_icons') || '{}');
 })();
 
-// Lucide icon SVG paths — name → [paths array, category, search tags]
+// Lucide icon SVG paths â€” name â†’ [paths array, category, search tags]
 // Format: [svgInnerHTML, category, tags]
 var LUCIDE_ICONS = {
-  // ── General ───────────────────────────────────────────────────────────────
+  // â”€â”€ General â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'folder':         ['<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>', 'general', 'folder files project'],
   'folder-open':    ['<path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/>', 'general', 'folder open files'],
   'inbox':          ['<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>', 'general', 'inbox mail tray'],
@@ -2353,7 +2373,7 @@ var LUCIDE_ICONS = {
   'map':            ['<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/>', 'general', 'map location geography'],
   'layout':         ['<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/>', 'general', 'layout dashboard structure'],
 
-  // ── Work & Planning ───────────────────────────────────────────────────────
+  // â”€â”€ Work & Planning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'briefcase':      ['<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>', 'work', 'work business job client'],
   'calendar':       ['<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>', 'work', 'calendar schedule planning date'],
   'clock':          ['<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', 'work', 'clock time schedule deadline'],
@@ -2378,7 +2398,7 @@ var LUCIDE_ICONS = {
   'globe':          ['<circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>', 'work', 'global international web world'],
   'presentation':   ['<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>', 'work', 'presentation slides deck'],
 
-  // ── Tech & Engineering ────────────────────────────────────────────────────
+  // â”€â”€ Tech & Engineering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'code':           ['<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>', 'tech', 'code software development programming'],
   'code-2':         ['<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>', 'tech', 'code dev programming'],
   'terminal':       ['<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>', 'tech', 'terminal cli command shell'],
@@ -2415,7 +2435,7 @@ var LUCIDE_ICONS = {
   'network':        ['<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>', 'tech', 'network infrastructure topology'],
   'workflow':       ['<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>', 'tech', 'workflow automation process pipeline'],
 
-  // ── Design & Creative ─────────────────────────────────────────────────────
+  // â”€â”€ Design & Creative â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'pen-tool':       ['<path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/>', 'design', 'design illustration vector'],
   'figma':          ['<path d="M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z"/><path d="M12 2h3.5a3.5 3.5 0 1 1 0 7H12V2z"/><path d="M12 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0z"/><path d="M5 19.5A3.5 3.5 0 0 1 8.5 16H12v3.5a3.5 3.5 0 1 1-7 0z"/><path d="M5 12.5A3.5 3.5 0 0 1 8.5 9H12v7H8.5A3.5 3.5 0 0 1 5 12.5z"/>', 'design', 'figma design ui ux'],
   'image':          ['<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>', 'design', 'image photo media visual'],
@@ -2426,7 +2446,7 @@ var LUCIDE_ICONS = {
   'framer':         ['<path d="M5 16V9h14V2H5l14 7v7H5l14 7H5v-7z"/>', 'design', 'framer motion animation'],
   'smile':          ['<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>', 'design', 'ux user experience'],
 
-  // ── Science & Research ────────────────────────────────────────────────────
+  // â”€â”€ Science & Research â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'flask':          ['<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>', 'science', 'experiment research testing lab'],
   'microscope':     ['<path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/>', 'science', 'research analysis science lab'],
   'atom':           ['<circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/>', 'science', 'science research atom physics'],
@@ -2434,7 +2454,7 @@ var LUCIDE_ICONS = {
   'test-tube':      ['<path d="M14.5 2 20 7.5l-7.5 7.5-5.5-5.5L14.5 2Z"/><path d="m14.5 2-.5 14a2 2 0 0 1-4 0L9.5 2"/><path d="M3 22h18"/>', 'science', 'test experiment qa'],
   'binary':         ['<rect x="14" y="14" width="4" height="6" rx="2"/><rect x="6" y="4" width="4" height="6" rx="2"/><path d="M6 20h4"/><path d="M14 10h4"/><path d="M6 14h2v6"/><path d="M14 4h2v6"/>', 'science', 'binary code data technical'],
 
-  // ── People & Life ─────────────────────────────────────────────────────────
+  // â”€â”€ People & Life â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'heart':          ['<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>', 'life', 'health wellness care love'],
   'activity':       ['<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>', 'life', 'health fitness activity monitor'],
   'sun':            ['<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>', 'life', 'today morning daily routine'],
@@ -2448,7 +2468,7 @@ var LUCIDE_ICONS = {
   'party-popper':   ['<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/>', 'life', 'celebrate event milestone party'],
   'dumbbell':       ['<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>', 'life', 'fitness health exercise gym'],
 
-  // ── Operations & Infrastructure ───────────────────────────────────────────
+  // â”€â”€ Operations & Infrastructure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'truck':          ['<path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11v12H5z"/><rect width="5" height="7" x="14" y="10" rx="1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>', 'ops', 'delivery logistics operations'],
   'factory':        ['<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/>', 'ops', 'manufacturing production factory ops'],
   'building':       ['<rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>', 'ops', 'office building company org'],
@@ -2461,7 +2481,7 @@ var LUCIDE_ICONS = {
   'clipboard-check':['<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>', 'ops', 'done approved complete review'],
   'scan':           ['<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" x2="7" y1="12" y2="12.01"/><path d="M11 12h4"/><line x1="17" x2="17" y1="12" y2="12.01"/>', 'ops', 'scan review audit compliance'],
 
-  // ── Data & Analytics ──────────────────────────────────────────────────────
+  // â”€â”€ Data & Analytics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   'table':          ['<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>', 'data', 'table data spreadsheet sql'],
   'sigma':          ['<path d="M18 7V4H6l6 8-6 8h12v-3"/>', 'data', 'math formula aggregate data'],
   'function-square':['<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>', 'data', 'function formula code math'],
@@ -2551,7 +2571,7 @@ function showIconPicker(nodeId, anchorEl) {
         }).join('')
       : '<div class="icon-picker-none">No icons found</div>';
     picker.innerHTML =
-      '<input class="icon-picker-search" placeholder="Search icons…" value="' + searchVal + '" />' +
+      '<input class="icon-picker-search" placeholder="Search iconsâ€¦" value="' + searchVal + '" />' +
       '<div class="icon-picker-cats">' + catsHTML + '</div>' +
       '<div class="icon-picker-grid">' + gridHTML + '</div>';
 
@@ -2630,7 +2650,7 @@ function clearSearch() {
   // Remove search highlights from DOM
   document.querySelectorAll('.search-active-row').forEach(function(r) { r.classList.remove('search-active-row'); });
   if (searchOpen) {
-    // Keep bar open but clear results — just re-render normally
+    // Keep bar open but clear results â€” just re-render normally
     render();
   }
 }
@@ -2761,15 +2781,15 @@ function searchRowHTML(n) {
   var meta = '';
   if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + bcHtml + '</span>';
   if (n.assignedTo && n.assignedTo !== currentUser) meta += '<span class="assignee-badge">' + esc(getMemberName(n.assignedTo)) + '</span>';
-  meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
+  meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : 'â€”') + '</span>';
 
   var acts = '';
   if (canEdit(n)) {
-    if (!n.isSection) acts += '<button class="act-btn" data-promote="' + n.id + '">↑ today</button>';
-    if (isOwner(n)) acts += '<button class="act-btn" data-del="' + n.id + '">✕</button>';
+    if (!n.isSection) acts += '<button class="act-btn" data-promote="' + n.id + '">â†‘ today</button>';
+    if (isOwner(n)) acts += '<button class="act-btn" data-del="' + n.id + '">âœ•</button>';
   }
 
-  // Use a div for the name display (not editable textarea in search results — read-only display)
+  // Use a div for the name display (not editable textarea in search results â€” read-only display)
   var nameEl = '<div class="' + cls + '" id="inp_' + n.id + '" data-id="' + n.id + '" data-flat="true" style="pointer-events:none;user-select:text;">' + nameHtml + '</div>';
 
   return '<div class="' + rowClass + '" data-id="' + n.id + '" style="padding-left:8px;">' +
@@ -2877,7 +2897,7 @@ function initDragAndDrop() {
   if (!el || el._dragInited) return;
   el._dragInited = true;
 
-  // ── Mouse drag selection ─────────────────────────────────────────────────
+  // â”€â”€ Mouse drag selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   var dragSelectStart = null;
   var dragSelecting = false;
 
@@ -3048,9 +3068,9 @@ function updateZoomCrumb() {
   }
   // Build breadcrumb path
   var path = ancestors(zoomedId).concat([nodes.find(function(n){ return n.id === zoomedId; })]).filter(Boolean);
-    var html = '<span style="cursor:pointer;color:var(--text3);" data-zoomout="root">⌂ All</span>';
+    var html = '<span style="cursor:pointer;color:var(--text3);" data-zoomout="root">âŒ‚ All</span>';
   path.forEach(function(n, i) {
-    html += ' <span style="color:var(--text3);">›</span> ';
+    html += ' <span style="color:var(--text3);">â€º</span> ';
     if (i < path.length - 1) {
       html += '<span style="cursor:pointer;" data-zoomout="' + n.id + '">' + esc(n.name) + '</span>';
     } else {
@@ -3136,6 +3156,12 @@ function toggleHideDone() {
   localStorage.setItem('momentum_hide_done', hideDone);
   var btn = document.getElementById('hideDoneBtn');
   if (btn) btn.textContent = hideDone ? 'Show done' : 'Hide done';
+  render(true);
+}
+
+function toggleShowWatchedToday(checked) {
+  showWatchedToday = !!checked;
+  localStorage.setItem('momentum_show_watched_today', showWatchedToday);
   render(true);
 }
 
@@ -3237,7 +3263,7 @@ function showCombinedPicker(sourceNode) {
 
   overlay.innerHTML =
     '<div style="background:var(--bg);border-radius:12px;border:0.5px solid var(--border2);width:600px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.15);">' +
-      '<div style="display:flex;border-bottom:0.5px solid var(--border);padding:8px 16px;font-size:11px;color:var(--text3);">↑↓ navigate &nbsp;·&nbsp; Tab switch column &nbsp;·&nbsp; Enter confirm section / done &nbsp;·&nbsp; Esc cancel</div>' +
+      '<div style="display:flex;border-bottom:0.5px solid var(--border);padding:8px 16px;font-size:11px;color:var(--text3);">â†‘â†“ navigate &nbsp;Â·&nbsp; Tab switch column &nbsp;Â·&nbsp; Enter confirm section / done &nbsp;Â·&nbsp; Esc cancel</div>' +
       '<div style="display:flex;flex:1;min-height:0;">' +
         '<div style="flex:1;border-right:0.5px solid var(--border);display:flex;flex-direction:column;">' +
           '<div id="secColHeader" style="padding:8px 12px;font-size:11px;font-weight:600;color:var(--text2);">SECTION</div>' +
@@ -3290,8 +3316,8 @@ function showCombinedPicker(sourceNode) {
       var isExp = pickerExpanded[n.id];
       var isHi = n.id === hiSection && focusCol === 'section';
       var isSel = n.id === selectedSection;
-      var arrow = hasChildren ? (isExp ? '▼ ' : '▶ ') : '· ';
-      var fav = sectionFavourites[n.id] > 0 ? '★ ' : '';
+      var arrow = hasChildren ? (isExp ? 'â–¼ ' : 'â–¶ ') : 'Â· ';
+      var fav = sectionFavourites[n.id] > 0 ? 'â˜… ' : '';
       var bg = isHi ? 'var(--accent)' : isSel ? 'var(--bg3)' : '';
       var col = isHi ? 'var(--bg)' : '';
       return '<div class="spick" data-id="' + n.id + '" style="padding:5px 12px 5px ' + (8 + item.depth * 16) + 'px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
@@ -3314,14 +3340,14 @@ function showCombinedPicker(sourceNode) {
 
     // Add "No assignee" option
     var noAssign = hiAssignee === null && focusCol === 'assignee';
-    list.innerHTML = '<div class="apick" data-email="" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + (noAssign ? 'var(--accent)' : '') + ';color:' + (noAssign ? 'var(--bg)' : 'var(--text3)') + ';">· None</div>' +
+    list.innerHTML = '<div class="apick" data-email="" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + (noAssign ? 'var(--accent)' : '') + ';color:' + (noAssign ? 'var(--bg)' : 'var(--text3)') + ';">Â· None</div>' +
       users.map(function(u) {
         var email = u.email || u;
         var name = u.name || (typeof u === 'string' ? u.split('@')[0] : email.split('@')[0]);
         var isHi = email.toLowerCase() === (hiAssignee || '').toLowerCase() && focusCol === 'assignee';
         var isSel = email.toLowerCase() === (selectedAssignee || '').toLowerCase();
         var isMe = email.toLowerCase() === (currentUser || '').toLowerCase();
-        var fav = (assigneeFavourites[email.toLowerCase()] || 0) > 0 ? '★ ' : '';
+        var fav = (assigneeFavourites[email.toLowerCase()] || 0) > 0 ? 'â˜… ' : '';
         var bg = isHi ? 'var(--accent)' : isSel ? 'var(--bg3)' : '';
         var col = isHi ? 'var(--bg)' : '';
         return '<div class="apick" data-email="' + esc(email) + '" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
@@ -3348,7 +3374,7 @@ function showCombinedPicker(sourceNode) {
     if (!s) return;
     var secName = selectedSection ? (nodes.find(function(n){return n.id===selectedSection;})||{}).name || '' : '(none)';
     var asgName = selectedAssignee ? selectedAssignee.split('@')[0] : '(none)';
-    s.textContent = 'Section: ' + secName + '  ·  Assign: ' + asgName;
+    s.textContent = 'Section: ' + secName + '  Â·  Assign: ' + asgName;
   }
 
   function render() { renderSections(); renderAssignees(); updateStatus(); }
@@ -3391,7 +3417,7 @@ function showCombinedPicker(sourceNode) {
         render();
       }
       else if (e.key === 'ArrowRight') {
-        // Only expand/collapse tree — never jump to assignee column
+        // Only expand/collapse tree â€” never jump to assignee column
         e.preventDefault();
         var hasChildren = nodes.some(function(c){ return c.parentId === hiSection && c.isSection; });
         if (hasChildren) { pickerExpanded[hiSection] = true; render(); }
@@ -3417,7 +3443,7 @@ function showCombinedPicker(sourceNode) {
       }
       else if (e.key === 'Escape') { cleanup(); }
     } else {
-      // Assignee column — list includes '' (none), emails, and ADD_NEW_SENTINEL at end
+      // Assignee column â€” list includes '' (none), emails, and ADD_NEW_SENTINEL at end
       var asgFullList = [''].concat(getSortedAssignees().map(function(u) { return u.email || u; })).concat([ADD_NEW_SENTINEL]);
       var aIdx = asgFullList.indexOf(hiAssignee || '');
       if (e.key === 'ArrowDown') {
@@ -3614,7 +3640,7 @@ function updateSelectionStyles() {
     var sel = selectedIds.has(r.dataset.id);
     r.classList.toggle('selected', sel);
     var btn = r.querySelector('.sel-btn');
-    if (btn) btn.textContent = sel ? '●' : '○';
+    if (btn) btn.textContent = sel ? 'â—' : 'â—‹';
   });
   var bar = document.getElementById('selectBar');
   var hint = document.getElementById('hintBar');
@@ -3658,12 +3684,12 @@ function startDrag(e, id) {
     var y = lastMv.clientY;
     var scrolled = false;
     if (y > rect.bottom - SCROLL_ZONE) {
-      // Near bottom — scroll down
+      // Near bottom â€” scroll down
       var intensity = Math.min(1, (y - (rect.bottom - SCROLL_ZONE)) / SCROLL_ZONE);
       el.scrollTop += Math.ceil(SCROLL_SPEED * intensity);
       scrolled = true;
     } else if (y < rect.top + SCROLL_ZONE) {
-      // Near top — scroll up
+      // Near top â€” scroll up
       var intensity = Math.min(1, ((rect.top + SCROLL_ZONE) - y) / SCROLL_ZONE);
       el.scrollTop -= Math.ceil(SCROLL_SPEED * intensity);
       scrolled = true;
@@ -3705,7 +3731,7 @@ function startDrag(e, id) {
         var n = nodes.find(function(x) { return x.id === sid; });
         return n ? n.name : sid;
       }).join(', ');
-      dragGhost.textContent = (selectedIds.size > 1 ? selectedIds.size + ' items: ' : '') + names.slice(0, 40) + (names.length > 40 ? '…' : '');
+      dragGhost.textContent = (selectedIds.size > 1 ? selectedIds.size + ' items: ' : '') + names.slice(0, 40) + (names.length > 40 ? 'â€¦' : '');
       document.body.appendChild(dragGhost);
       selectedIds.forEach(function(sid) {
         var r = el ? el.querySelector('[data-id="' + sid + '"]') : null;
@@ -3773,7 +3799,7 @@ function performDrop(srcIds, tgtId, mode) {
 
   var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
 
-  // In flat views, never allow nesting — treat child drop as below
+  // In flat views, never allow nesting â€” treat child drop as below
   if (mode === 'child' && isFlat) mode = 'below';
 
   var newParentId, insertAt;
@@ -3794,7 +3820,7 @@ function performDrop(srcIds, tgtId, mode) {
   srcIds.forEach(function(id) {
     var n = moveNodes.find(function(x) { return x.id === id; });
     if (n) {
-      // In flat views preserve each node's own parentId — only reorder, don't reparent
+      // In flat views preserve each node's own parentId â€” only reorder, don't reparent
       if (!isFlat) n.parentId = newParentId;
     }
   });
@@ -3811,11 +3837,11 @@ function performDrop(srcIds, tgtId, mode) {
   });
 
   render();
-  // Keep selection visible after move — user clears manually via × button
+  // Keep selection visible after move â€” user clears manually via Ã— button
   updateSelectionStyles();
 }
 
-// ── Undo ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Undo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var undoStack = []; // each entry: {nodes: [...], collapsed: {...}}
 var redoStack = [];
 var MAX_UNDO = 30;
@@ -3834,7 +3860,7 @@ function pushUndo() {
 function undo() {
   if (!undoStack.length) return;
   bumpGeneration();
-  // Clear any pending saves/deletes — they reflected pre-undo state and are now invalid
+  // Clear any pending saves/deletes â€” they reflected pre-undo state and are now invalid
   queueState.saves = {};
   queueState.deletes = {};
   persistQueue();
@@ -3944,10 +3970,10 @@ function redo() {
   render();
 }
 
-// ── Mobile helpers ─────────────────────────────────────────────────────────
+// â”€â”€ Mobile helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Inject viewport meta directly into this document (Apps Script iframe)
 (function() {
-  // Viewport meta — inject multiple ways to ensure it takes effect in the iframe
+  // Viewport meta â€” inject multiple ways to ensure it takes effect in the iframe
   var vpContent = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
   if (!document.querySelector('meta[name="viewport"]')) {
     var m = document.createElement('meta');
@@ -3961,7 +3987,7 @@ function redo() {
   s.textContent = 'html,body{max-width:100%!important;overflow-x:hidden!important;}';
   document.head.appendChild(s);
 
-  // Pre-inject mobile styles — will be activated by adding class to <style> id
+  // Pre-inject mobile styles â€” will be activated by adding class to <style> id
   // We inject immediately so they're ready before any render
   var ms = document.getElementById('mobileStyleTag');
   if (!ms) {
@@ -3991,7 +4017,7 @@ function redo() {
     '.hint-bar{display:none!important}' +
     '#collapseBtn{display:none!important}';
 
-  // Favicon — inline SVG as data URI, works as tab icon + home screen icon
+  // Favicon â€” inline SVG as data URI, works as tab icon + home screen icon
   var svgIcon = [
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
       '<rect width="64" height="64" rx="14" fill="#1a1a1a"/>',
@@ -4012,7 +4038,7 @@ function redo() {
 
   // Apple touch icon (home screen on iOS)
   if (!document.querySelector('link[rel="apple-touch-icon"]')) {
-    // For iOS we need a PNG — use a canvas to convert SVG → PNG
+    // For iOS we need a PNG â€” use a canvas to convert SVG â†’ PNG
     var img = new Image();
     img.onload = function() {
       var canvas = document.createElement('canvas');
@@ -4044,7 +4070,7 @@ function redo() {
   });
 })();
 
-// Mobile detection and layout — applied directly via inline styles to bypass iframe CSS issues
+// Mobile detection and layout â€” applied directly via inline styles to bypass iframe CSS issues
 var isMobile = false;
 
 function applyMobileStyles() {
@@ -4064,7 +4090,7 @@ function applyMobileStyles() {
   var body = document.body;
 
   if (isMobile) {
-    // Body and app — full screen, no padding/card
+    // Body and app â€” full screen, no padding/card
     if (body) { body.style.padding = '0'; body.style.background = 'var(--bg)'; body.style.alignItems = 'stretch'; }
     if (app) { app.style.maxWidth = '100%'; app.style.height = '100dvh'; app.style.borderRadius = '0'; app.style.border = 'none'; app.style.boxShadow = 'none'; app.style.margin = '0'; }
     // Toolbar
@@ -4082,7 +4108,7 @@ function applyMobileStyles() {
     var redoBtn = document.getElementById('redoBtn');
     if (undoBtn) { undoBtn.style.fontSize = '18px'; undoBtn.style.padding = '5px 10px'; }
     if (redoBtn) { redoBtn.style.fontSize = '18px'; redoBtn.style.padding = '5px 10px'; }
-    // Avatar is already set — just resize for mobile
+    // Avatar is already set â€” just resize for mobile
     var avatar = document.getElementById('userAvatar');
     if (avatar) { avatar.style.width = '34px'; avatar.style.height = '34px'; avatar.style.fontSize = '15px'; }
     var syncDot = document.getElementById('syncDot');
@@ -4198,7 +4224,7 @@ function applyMobileStyles() {
   }
 }
 
-// Mobile keyboard accessory bar — show/hide above the keyboard while editing.
+// Mobile keyboard accessory bar â€” show/hide above the keyboard while editing.
 // On desktop these are no-ops because the bar is hidden via CSS (.is-mobile gate).
 function showKbBar(inp) {
   if (!isMobile) return;
@@ -4209,7 +4235,7 @@ function hideKbBar() {
   var bar = document.getElementById('kbBar');
   if (bar) bar.classList.remove('active');
 }
-// Wire the bar's buttons once. Idempotent — re-runs are safe.
+// Wire the bar's buttons once. Idempotent â€” re-runs are safe.
 var _kbBarInited = false;
 function initKbBar() {
   if (_kbBarInited) return;
@@ -4251,7 +4277,7 @@ function checkMobile() {
   var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   var narrowWindow = window.innerWidth > 0 && window.innerWidth <= 900;
   // Mobile = phone UA, OR (touch device AND narrow screen)
-  // Do NOT use hasTouch alone — touch-screen laptops/PCs would trigger mobile mode
+  // Do NOT use hasTouch alone â€” touch-screen laptops/PCs would trigger mobile mode
   isMobile = uaMobile || (hasTouch && narrowWindow) || (narrowWindow && !hasTouch && window.innerWidth <= 640);
   applyMobileStyles();
 }
@@ -4263,19 +4289,19 @@ function attachMobileSwipe() {
   if (!treeEl || treeEl._swipeInited) return;
   treeEl._swipeInited = true;
 
-  // ── Constants ──────────────────────────────────────────────────────────────
+  // â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   var LONG_PRESS_MS  = 650;   // hold duration to trigger select or drag (longer than browser's ~500ms native menu)
   var MOVE_CANCEL_PX = 20;    // movement that cancels a long press
   var TAP_MAX_PX = 35;         // max movement to still count as a tap
   var SWIPE_MIN_PX   = 60;    // horizontal swipe threshold for action sheet
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Gesture phases:
-  //   'idle'           — no touch active
-  //   'pressing'       — finger down, waiting (long press not yet fired)
-  //   'range-select'   — long press fired in select mode, finger dragging to range-select
-  //   'drag'           — long press fired in selection mode (2nd press), dragging items
-  //   'swipe'          — horizontal left swipe for action sheet
+  //   'idle'           â€” no touch active
+  //   'pressing'       â€” finger down, waiting (long press not yet fired)
+  //   'range-select'   â€” long press fired in select mode, finger dragging to range-select
+  //   'drag'           â€” long press fired in selection mode (2nd press), dragging items
+  //   'swipe'          â€” horizontal left swipe for action sheet
   var phase = 'idle';
   var startX = 0, startY = 0;
   var activeRow = null;
@@ -4291,13 +4317,13 @@ function attachMobileSwipe() {
     if (longTimer) { clearTimeout(longTimer); longTimer = null; }
   }
 
-  // ── Ghost for drag ─────────────────────────────────────────────────────────
+  // â”€â”€ Ghost for drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function createGhost(x, y) {
     dragGhostEl = document.createElement('div');
     var ids = dragIds.length ? dragIds : [...selectedIds];
     var names = ids.map(function(sid) {
       var n = nodes.find(function(x){ return x.id === sid; });
-      return n ? (n.name || '…') : sid;
+      return n ? (n.name || 'â€¦') : sid;
     }).join(', ');
     dragGhostEl.textContent = (ids.length > 1 ? ids.length + ' items' : names.slice(0, 50));
     dragGhostEl.style.cssText = 'position:fixed;pointer-events:none;background:var(--bg);border:2.5px solid var(--accent);border-radius:10px;padding:10px 18px;font-size:22px;color:var(--text);opacity:0.93;z-index:9999;white-space:nowrap;box-shadow:0 6px 24px rgba(0,0,0,0.25);max-width:75vw;overflow:hidden;text-overflow:ellipsis;';
@@ -4345,7 +4371,7 @@ function attachMobileSwipe() {
     }
   }
 
-  // ── TOUCHSTART ─────────────────────────────────────────────────────────────
+  // â”€â”€ TOUCHSTART â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   treeEl.addEventListener('touchstart', function(e) {
     // Safety: if a ghost is stuck on screen, clean it up first
     if (dragGhostEl) { cleanupDrag(); phase = 'idle'; }
@@ -4371,7 +4397,7 @@ function attachMobileSwipe() {
         setTimeout(function() { suppressBlur = false; }, 100);
       }
       if (selectionMode) {
-        // ── Second long press while in selection mode → START DRAG ──────────
+        // â”€â”€ Second long press while in selection mode â†’ START DRAG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Ensure the pressed item is included in the drag
         if (!selectedIds.has(nodeId)) {
           selectedIds.add(nodeId);
@@ -4381,7 +4407,7 @@ function attachMobileSwipe() {
         phase = 'drag';
         createGhost(startX, startY);
       } else {
-        // ── First long press → enter selection mode ─────────────────────────
+        // â”€â”€ First long press â†’ enter selection mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         selectedIds.clear();
         selectedIds.add(nodeId);
         updateSelectionStyles();
@@ -4392,7 +4418,7 @@ function attachMobileSwipe() {
 
   }, { passive: true });
 
-  // ── TOUCHMOVE ──────────────────────────────────────────────────────────────
+  // â”€â”€ TOUCHMOVE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   treeEl.addEventListener('touchmove', function(e) {
     if (e.touches.length !== 1) return;
     var t = e.touches[0];
@@ -4449,7 +4475,7 @@ function attachMobileSwipe() {
 
   }, { passive: false });
 
-  // ── TOUCHEND ───────────────────────────────────────────────────────────────
+  // â”€â”€ TOUCHEND â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function cleanupDrag() {
     destroyGhost();
     dragIds = [];
@@ -4489,7 +4515,7 @@ function attachMobileSwipe() {
     }
 
     if (endPhase === 'range-select') {
-      // Long press just fired and finger lifted — stay in selection mode
+      // Long press just fired and finger lifted â€” stay in selection mode
       activeRow = null;
       return;
     }
@@ -4505,13 +4531,13 @@ function attachMobileSwipe() {
         // Prevent the tap from also triggering click/focus on the row
         e.preventDefault && e.preventDefault();
       }
-      // If not in selection mode, normal tap — let click bubble
+      // If not in selection mode, normal tap â€” let click bubble
     }
 
     activeRow = null;
   }, { passive: false });
 
-  // touchcancel — system interrupted (notification, call, etc) — always clean up
+  // touchcancel â€” system interrupted (notification, call, etc) â€” always clean up
   treeEl.addEventListener('touchcancel', function() {
     cancelTimer();
     cleanupDrag();
@@ -4666,7 +4692,7 @@ function showMobileActionSheet(nodeId) {
   if (!n) return;
   var existing = document.getElementById('mobileSheet');
   if (existing) existing.remove();
-  // Snapshot selected IDs at open time — they may get cleared before action fires
+  // Snapshot selected IDs at open time â€” they may get cleared before action fires
   var snapshotIds = (selectionMode && selectedIds.size > 0) ? [...selectedIds] : [nodeId];
   // Make sure the tapped node is included
   if (snapshotIds.indexOf(nodeId) === -1) snapshotIds.push(nodeId);
@@ -4680,14 +4706,14 @@ function showMobileActionSheet(nodeId) {
       '<div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:8px auto 16px;"></div>' +
       '<div style="padding:0 8px;font-size:12px;color:var(--text3);margin-bottom:4px;padding-left:20px;">' + esc(n.name||'').slice(0,40) + '</div>' +
       (canEdit(n) ? [
-        !n.done ? '<button class="msa-btn" data-action="done">✓ Mark done</button>' : '<button class="msa-btn" data-action="undone">↩ Mark not done</button>',
-        !n.isSection ? (n.watching ? '<button class="msa-btn" data-action="unwatch">👁 Stop watching</button>' : '<button class="msa-btn" data-action="watch">👁 Done &amp; watch</button>') : '',
-        !n.isSection ? '<button class="msa-btn" data-action="today">📅 Schedule today</button>' : '',
-        '<button class="msa-btn" data-action="section">' + (n.isSection ? '→ Convert to task' : '→ Convert to section') + '</button>',
-        '<button class="msa-btn" data-action="move">↗ Move to section</button>',
-        !n.isSection ? '<button class="msa-btn" data-action="assign">👤 Assign</button>' : '',
-        isOwner(n) ? '<button class="msa-btn" data-action="share">🔗 Share</button>' : '',
-        isOwner(n) ? '<button class="msa-btn" style="color:#e24b4a;" data-action="delete">✕ Delete</button>' : ''
+        !n.done ? '<button class="msa-btn" data-action="done">âœ“ Mark done</button>' : '<button class="msa-btn" data-action="undone">â†© Mark not done</button>',
+        !n.isSection ? (n.watching ? '<button class="msa-btn" data-action="unwatch">ðŸ‘ Stop watching</button>' : '<button class="msa-btn" data-action="watch">ðŸ‘ Done &amp; watch</button>') : '',
+        !n.isSection ? '<button class="msa-btn" data-action="today">ðŸ“… Schedule today</button>' : '',
+        '<button class="msa-btn" data-action="section">' + (n.isSection ? 'â†’ Convert to task' : 'â†’ Convert to section') + '</button>',
+        '<button class="msa-btn" data-action="move">â†— Move to section</button>',
+        !n.isSection ? '<button class="msa-btn" data-action="assign">ðŸ‘¤ Assign</button>' : '',
+        isOwner(n) ? '<button class="msa-btn" data-action="share">ðŸ”— Share</button>' : '',
+        isOwner(n) ? '<button class="msa-btn" style="color:#e24b4a;" data-action="delete">âœ• Delete</button>' : ''
       ].join('') : '<div style="padding:16px 20px;color:var(--text3);font-size:13px;">Read-only</div>') +
     '</div>';
 
@@ -4776,7 +4802,7 @@ function switchUser() {
     localStorage.removeItem('momentum_user_email');
     localStorage.removeItem('momentum_access_token');
     localStorage.removeItem('momentum_token_expiry');
-    // Also clear the persistent queue — this user's queue should not carry over
+    // Also clear the persistent queue â€” this user's queue should not carry over
     // to a different user account
     localStorage.removeItem(QUEUE_KEY);
     queueState.saves = {};
@@ -4800,7 +4826,7 @@ function switchUser() {
 //   2. Verify auth via whoAmI
 //   3. Fetch initial data (full replace if queue is empty; merge otherwise)
 //   4. Flush the restored queue (runs in background, doesn't block app)
-// No polling interval — we rely on visibilitychange for passive refresh.
+// No polling interval â€” we rely on visibilitychange for passive refresh.
 function bootApp() {
   mlog('bootApp: invoked. token valid?', isTokenValid());
   loadQueue();
@@ -4917,11 +4943,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (Date.now() - lastVisibleFetch < 2000) return;
     lastVisibleFetch = Date.now();
     mlog('refresh on', source);
-    fetchAll(false); // reconcile mode — protects in-progress edits
+    fetchAll(false); // reconcile mode â€” protects in-progress edits
   }
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
-      // Tab losing focus — flush queue synchronously if there's work to do.
+      // Tab losing focus â€” flush queue synchronously if there's work to do.
       if (!queueIsEmpty() && !batchInFlight) flushBatch();
       return;
     }
@@ -4929,7 +4955,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   window.addEventListener('focus', function() { onWindowActivated('focus'); });
   // Best-effort flush on page close. Queue is persisted to localStorage so
-  // worst case we retry on next boot — this just speeds things up.
+  // worst case we retry on next boot â€” this just speeds things up.
   window.addEventListener('beforeunload', function() {
     if (!queueIsEmpty() && !batchInFlight) flushBatch();
   });
@@ -4937,7 +4963,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!queueIsEmpty() && !batchInFlight) flushBatch();
   });
   // Boot: check for valid token, or try silent refresh.
-  // Wait for GSI to be loaded before deciding — silent refresh needs it.
+  // Wait for GSI to be loaded before deciding â€” silent refresh needs it.
   function gsiReady() {
     return typeof google !== 'undefined' && google.accounts && google.accounts.oauth2;
   }
@@ -4954,11 +4980,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       mlog('bootDecision: no valid token, attempting silent refresh');
       silentRefreshToken().then(function() {
-        mlog('bootDecision: silent refresh succeeded → showApp + bootApp');
+        mlog('bootDecision: silent refresh succeeded â†’ showApp + bootApp');
         showApp();
         bootApp();
       }).catch(function(e) {
-        mwarn('bootDecision: silent refresh failed:', e && e.message, '→ showSignIn');
+        mwarn('bootDecision: silent refresh failed:', e && e.message, 'â†’ showSignIn');
         showSignIn();
         localStorage.removeItem('momentum_access_token');
         localStorage.removeItem('momentum_token_expiry');
@@ -4978,3 +5004,4 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 </script>
+
