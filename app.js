@@ -451,6 +451,7 @@ var GOOGLE_CLIENT_ID = '913817622885-l3r8vmm1lldqlhlp9d2jaodm0kvs75ko.apps.googl
 // ── Auth state ────────────────────────────────────────────────────────────────
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
 var _tokenExpiry = parseInt(localStorage.getItem('momentum_token_expiry') || '0');
+var _momentumSessionToken = localStorage.getItem('momentum_session_token') || null;
 
 function isTokenValid() {
   return MomentumCore.tokenIsValid(_googleAccessToken, _tokenExpiry, Date.now(), 30000);
@@ -475,8 +476,10 @@ function signInWithGoogle() {
       }
       _googleAccessToken = response.access_token;
       _tokenExpiry = Date.now() + (response.expires_in * 1000);
+      _momentumSessionToken = null;
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
+      localStorage.removeItem('momentum_session_token');
       mlog('signInWithGoogle: token persisted, calling showApp + bootApp');
       showApp();
       bootApp();
@@ -494,8 +497,10 @@ function signOut() {
       google.accounts.oauth2.revoke(_googleAccessToken, function() {});
     }
     _googleAccessToken = null;
+    _momentumSessionToken = null;
     localStorage.removeItem('momentum_access_token');
     localStorage.removeItem('momentum_token_expiry');
+    localStorage.removeItem('momentum_session_token');
     localStorage.removeItem('momentum_user_email');
     showSignIn();
   };
@@ -525,10 +530,11 @@ function showApp() {
 // ── API call — replaces google.script.run ─────────────────────────────────────
 function gsr(fnName, arg) {
   return new Promise(function(resolve, reject) {
-    var valid = isTokenValid();
-    mlog('gsr:', fnName, 'tokenValid?', valid, 'token?', !!_googleAccessToken);
-    if (!valid) {
-      mlog('gsr:', fnName, '→ token invalid; waiting for explicit sign-in');
+    var googleTokenValid = isTokenValid();
+    var hasSession = !!_momentumSessionToken;
+    mlog('gsr:', fnName, 'googleTokenValid?', googleTokenValid, 'session?', hasSession);
+    if (!googleTokenValid && !hasSession) {
+      mlog('gsr:', fnName, '→ no valid session; waiting for explicit sign-in');
       handleAuthFailure();
       reject(new Error('Not authenticated'));
       return;
@@ -541,7 +547,10 @@ function gsr(fnName, arg) {
       body: JSON.stringify({
         fn: fnName,
         arg: arg !== undefined ? arg : null,
-        token: _googleAccessToken,
+        // Once Apps Script has issued a durable Momentum session, prefer it and
+        // stop sending the short-lived Google token on every request.
+        token: hasSession ? '' : _googleAccessToken,
+        sessionToken: _momentumSessionToken || '',
         email: currentUser || localStorage.getItem('momentum_user_email') || ''
       })
     })
@@ -559,6 +568,11 @@ function gsr(fnName, arg) {
       }
       if (data && data.error === 'Unauthorized') {
         mwarn('gsr:', fnName, '→ server says Unauthorized; waiting for explicit sign-in');
+        _googleAccessToken = null;
+        _momentumSessionToken = null;
+        localStorage.removeItem('momentum_access_token');
+        localStorage.removeItem('momentum_token_expiry');
+        localStorage.removeItem('momentum_session_token');
         handleAuthFailure();
         reject(new Error('Unauthorized'));
         return;
@@ -4510,6 +4524,7 @@ function switchUser() {
     localStorage.removeItem('momentum_user_email');
     localStorage.removeItem('momentum_access_token');
     localStorage.removeItem('momentum_token_expiry');
+    localStorage.removeItem('momentum_session_token');
     // Also clear the persistent queue — this user's queue should not carry over
     // to a different user account
     localStorage.removeItem(QUEUE_KEY);
@@ -4522,6 +4537,7 @@ function switchUser() {
       google.accounts.oauth2.revoke(_googleAccessToken, function() {});
     }
     _googleAccessToken = null;
+    _momentumSessionToken = null;
     showSignIn();
   };
   // Flush before switching so the current user's work makes it to the sheet
@@ -4544,6 +4560,10 @@ function bootApp() {
     if (r && r.email) {
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
+      if (r.sessionToken) {
+        _momentumSessionToken = r.sessionToken;
+        localStorage.setItem('momentum_session_token', r.sessionToken);
+      }
       var pill = document.getElementById('userPill');
       if (pill) pill.textContent = currentUser;
       mlog('bootApp: about to fetchAll(initial=', queueIsEmpty(), ')');
@@ -4563,7 +4583,9 @@ function bootApp() {
       mlog('bootApp: authentication required; waiting for explicit sign-in');
       localStorage.removeItem('momentum_access_token');
       localStorage.removeItem('momentum_token_expiry');
+      localStorage.removeItem('momentum_session_token');
       _googleAccessToken = null;
+      _momentumSessionToken = null;
       handleAuthFailure();
     } else {
       mwarn('bootApp: showing connection error UI for:', msg);
@@ -4699,18 +4721,21 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   function bootDecision() {
     var v = isTokenValid();
+    var hasSession = !!_momentumSessionToken;
     var stored = !!_googleAccessToken;
     var expiry = _tokenExpiry ? new Date(_tokenExpiry).toLocaleTimeString() : 'none';
-    mlog('bootDecision: tokenValid=', v, 'storedToken=', stored, 'expiry=', expiry, 'GSI ready=', gsiReady());
-    if (v) {
-      mlog('bootDecision: token valid, going straight to bootApp');
+    mlog('bootDecision: tokenValid=', v, 'session=', hasSession, 'storedToken=', stored, 'expiry=', expiry, 'GSI ready=', gsiReady());
+    if (v || hasSession) {
+      mlog('bootDecision: authentication available, going straight to bootApp');
       showApp();
       bootApp();
     } else {
       mlog('bootDecision: no valid token; waiting for explicit sign-in');
       localStorage.removeItem('momentum_access_token');
       localStorage.removeItem('momentum_token_expiry');
+      localStorage.removeItem('momentum_session_token');
       _googleAccessToken = null;
+      _momentumSessionToken = null;
       showSignIn();
     }
   }

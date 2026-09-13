@@ -33,3 +33,10 @@ test('Google access-token popups are only requested by explicit sign-in', () => 
   assert.doesNotMatch(app, /silentRefreshToken|silentRefreshWithRetry|scheduleTokenRefresh/);
   assert.match(app, /function signInWithGoogle\(\)[\s\S]*client\.requestAccessToken\(\)/);
 });
+
+test('a durable Momentum session is preferred after Google sign-in', () => {
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.match(app, /momentum_session_token/);
+  assert.match(app, /sessionToken: _momentumSessionToken \|\| ''/);
+  assert.match(app, /if \(v \|\| hasSession\)/);
+});
