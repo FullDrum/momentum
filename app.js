@@ -451,116 +451,9 @@ var GOOGLE_CLIENT_ID = '913817622885-l3r8vmm1lldqlhlp9d2jaodm0kvs75ko.apps.googl
 // ── Auth state ────────────────────────────────────────────────────────────────
 var _googleAccessToken = localStorage.getItem('momentum_access_token') || null;
 var _tokenExpiry = parseInt(localStorage.getItem('momentum_token_expiry') || '0');
-var _tokenRefreshTimer = null;
-var _silentRefreshPromise = null; // deduplicate concurrent refresh attempts
 
 function isTokenValid() {
   return MomentumCore.tokenIsValid(_googleAccessToken, _tokenExpiry, Date.now(), 30000);
-}
-
-// Proactive refresh: fires 5 min before the token expires
-function scheduleTokenRefresh() {
-  if (_tokenRefreshTimer) clearTimeout(_tokenRefreshTimer);
-  if (!_tokenExpiry) return;
-  var delay = _tokenExpiry - Date.now() - 5 * 60 * 1000; // 5 min early
-  if (delay < 0) delay = 0;
-  _tokenRefreshTimer = setTimeout(function() {
-    silentRefreshToken().catch(function() { /* will surface on next API call */ });
-  }, delay);
-}
-
-// Silent token refresh — reuses the existing Google session, no popup
-function silentRefreshToken() {
-  if (_silentRefreshPromise) { mlog('silentRefreshToken: dedup, in-flight'); return _silentRefreshPromise; }
-  mlog('silentRefreshToken: starting. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
-  _silentRefreshPromise = new Promise(function(resolve, reject) {
-    var settled = false;
-    var timeout = setTimeout(function() {
-      if (settled) return;
-      settled = true;
-      _silentRefreshPromise = null;
-      var err = new Error('Google sign-in timed out');
-      err.fatal = false;
-      reject(err);
-    }, 6000);
-    try {
-      var hint = localStorage.getItem('momentum_user_email') || '';
-      mlog('silentRefreshToken: hint=', hint);
-      if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-        var ge = new Error('GSI not loaded');
-        ge.fatal = false;
-        clearTimeout(timeout);
-        settled = true;
-        _silentRefreshPromise = null;
-        merror('silentRefreshToken: GSI library not available');
-        reject(ge);
-        return;
-      }
-      var client = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'email profile',
-        prompt: 'none',       // truly silent — no UI at all
-        login_hint: hint,     // skip account chooser
-        callback: function(response) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          _silentRefreshPromise = null;
-          mlog('silentRefreshToken: callback. error=', response.error || 'none', 'has token?', !!response.access_token);
-          if (response.error) {
-            var err = new Error(response.error);
-            err.fatal = (response.error === 'interaction_required' ||
-                         response.error === 'consent_required' ||
-                         response.error === 'login_required');
-            mwarn('silentRefreshToken: rejected', response.error, 'fatal=', err.fatal);
-            reject(err);
-            return;
-          }
-          _googleAccessToken = response.access_token;
-          _tokenExpiry = Date.now() + (response.expires_in * 1000);
-          localStorage.setItem('momentum_access_token', _googleAccessToken);
-          localStorage.setItem('momentum_token_expiry', _tokenExpiry);
-          scheduleTokenRefresh();
-          mlog('silentRefreshToken: resolved with new token, expires in', response.expires_in, 's');
-          resolve();
-        }
-      });
-      client.requestAccessToken();
-    } catch(e) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      _silentRefreshPromise = null;
-      merror('silentRefreshToken: threw', e && e.message);
-      reject(e);
-    }
-  });
-  return _silentRefreshPromise;
-}
-
-// Retry silent refresh up to `attempts` times with exponential backoff.
-// Fatal errors (interaction_required) short-circuit immediately.
-// Transient errors (network, service down) retry with 500ms, 2s, 5s delays.
-function silentRefreshWithRetry(attempts) {
-  attempts = attempts || 3;
-  var delays = [0, 500, 2000, 5000];
-  var attempt = 0;
-  mlog('silentRefreshWithRetry: starting, max attempts=', attempts);
-  return new Promise(function(resolve, reject) {
-    function tryOnce() {
-      mlog('silentRefreshWithRetry: attempt', attempt + 1, 'of', attempts);
-      silentRefreshToken()
-        .then(function() { mlog('silentRefreshWithRetry: success'); resolve(); })
-        .catch(function(e) {
-          attempt++;
-          mwarn('silentRefreshWithRetry: attempt', attempt, 'failed:', e && e.message, 'fatal=', e && e.fatal);
-          if (e && e.fatal) { mwarn('silentRefreshWithRetry: aborting (fatal)'); reject(e); return; }
-          if (attempt >= attempts) { mwarn('silentRefreshWithRetry: exhausted'); reject(e); return; }
-          setTimeout(tryOnce, delays[attempt] || 5000);
-        });
-    }
-    tryOnce();
-  });
 }
 
 function signInWithGoogle() {
@@ -584,7 +477,6 @@ function signInWithGoogle() {
       _tokenExpiry = Date.now() + (response.expires_in * 1000);
       localStorage.setItem('momentum_access_token', _googleAccessToken);
       localStorage.setItem('momentum_token_expiry', _tokenExpiry);
-      scheduleTokenRefresh();
       mlog('signInWithGoogle: token persisted, calling showApp + bootApp');
       showApp();
       bootApp();
@@ -636,19 +528,9 @@ function gsr(fnName, arg) {
     var valid = isTokenValid();
     mlog('gsr:', fnName, 'tokenValid?', valid, 'token?', !!_googleAccessToken);
     if (!valid) {
-      mlog('gsr:', fnName, '→ token invalid, attempting silent refresh');
-      silentRefreshWithRetry(3).then(function() {
-        mlog('gsr:', fnName, '→ silent refresh succeeded, retrying call');
-        gsr(fnName, arg).then(resolve).catch(reject);
-      }).catch(function(e) {
-        mwarn('gsr:', fnName, '→ silent refresh failed:', e && e.message, 'fatal=', e && e.fatal);
-        if (e && e.fatal) {
-          handleAuthFailure();
-          reject(new Error('Not authenticated'));
-        } else {
-          reject(e || new Error('Auth refresh failed'));
-        }
-      });
+      mlog('gsr:', fnName, '→ token invalid; waiting for explicit sign-in');
+      handleAuthFailure();
+      reject(new Error('Not authenticated'));
       return;
     }
     mlog('gsr:', fnName, '→ POST to', APPS_SCRIPT_URL.slice(-30));
@@ -676,18 +558,9 @@ function gsr(fnName, arg) {
         throw new Error('Server returned non-JSON response');
       }
       if (data && data.error === 'Unauthorized') {
-        mwarn('gsr:', fnName, '→ server says Unauthorized, trying silent refresh + retry');
-        silentRefreshWithRetry(3).then(function() {
-          gsr(fnName, arg).then(resolve).catch(reject);
-        }).catch(function(e) {
-          mwarn('gsr:', fnName, '→ refresh after Unauthorized failed:', e && e.message);
-          if (e && e.fatal) {
-            handleAuthFailure();
-            reject(new Error('Unauthorized'));
-          } else {
-            reject(new Error('Unauthorized'));
-          }
-        });
+        mwarn('gsr:', fnName, '→ server says Unauthorized; waiting for explicit sign-in');
+        handleAuthFailure();
+        reject(new Error('Unauthorized'));
         return;
       }
       if (data && data.error) { mwarn('gsr:', fnName, '→ server error:', data.error); reject(new Error(data.error)); return; }
@@ -712,6 +585,7 @@ function handleAuthFailure() {
       ' — please sign in to save.';
     errEl.style.display = 'block';
   } else if (errEl) {
+    errEl.textContent = 'Your session expired. Sign in again to continue.';
     errEl.style.display = 'block';
   }
   showSignIn();
@@ -4686,17 +4560,11 @@ function bootApp() {
     merror('bootApp: whoAmI failed:', e && e.message);
     var msg = (e && e.message) || 'Unknown error';
     if (msg === 'Not authenticated' || msg === 'Unauthorized') {
-      mlog('bootApp: trying silent refresh + retry');
-      silentRefreshWithRetry(3).then(function() {
-        mlog('bootApp: refresh worked, calling bootApp again');
-        bootApp();
-      }).catch(function(re) {
-        mwarn('bootApp: refresh failed (', re && re.message, '), going to sign-in');
-        localStorage.removeItem('momentum_access_token');
-        localStorage.removeItem('momentum_token_expiry');
-        _googleAccessToken = null;
-        showSignIn();
-      });
+      mlog('bootApp: authentication required; waiting for explicit sign-in');
+      localStorage.removeItem('momentum_access_token');
+      localStorage.removeItem('momentum_token_expiry');
+      _googleAccessToken = null;
+      handleAuthFailure();
     } else {
       mwarn('bootApp: showing connection error UI for:', msg);
       var tree = document.getElementById('treeEl');
@@ -4824,8 +4692,8 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('pagehide', function() {
     if (!queueIsEmpty() && !batchInFlight) flushBatch();
   });
-  // Boot: check for valid token, or try silent refresh.
-  // Wait for GSI to be loaded before deciding — silent refresh needs it.
+  // Boot with a valid saved token. If it expired, wait for the user to click
+  // Sign in so Google never opens an unexpected background popup.
   function gsiReady() {
     return typeof google !== 'undefined' && google.accounts && google.accounts.oauth2;
   }
@@ -4836,21 +4704,14 @@ document.addEventListener('DOMContentLoaded', function() {
     mlog('bootDecision: tokenValid=', v, 'storedToken=', stored, 'expiry=', expiry, 'GSI ready=', gsiReady());
     if (v) {
       mlog('bootDecision: token valid, going straight to bootApp');
-      scheduleTokenRefresh();
       showApp();
       bootApp();
     } else {
-      mlog('bootDecision: no valid token, attempting silent refresh');
-      silentRefreshToken().then(function() {
-        mlog('bootDecision: silent refresh succeeded → showApp + bootApp');
-        showApp();
-        bootApp();
-      }).catch(function(e) {
-        mwarn('bootDecision: silent refresh failed:', e && e.message, '→ showSignIn');
-        showSignIn();
-        localStorage.removeItem('momentum_access_token');
-        localStorage.removeItem('momentum_token_expiry');
-      });
+      mlog('bootDecision: no valid token; waiting for explicit sign-in');
+      localStorage.removeItem('momentum_access_token');
+      localStorage.removeItem('momentum_token_expiry');
+      _googleAccessToken = null;
+      showSignIn();
     }
   }
   // Wait up to 3 seconds for GSI to load before booting

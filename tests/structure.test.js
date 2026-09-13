@@ -26,3 +26,10 @@ test('application uses the active Apps Script deployment', () => {
   const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   assert.match(app, /AKfycbweX3x7fglJ-R78DROUj4DPfqWfw9SosOqPX4htozEAcIPEvS3o5U52cL8WGGAsSzaH\/exec/);
 });
+
+test('Google access-token popups are only requested by explicit sign-in', () => {
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.equal((app.match(/requestAccessToken\(\)/g) || []).length, 1);
+  assert.doesNotMatch(app, /silentRefreshToken|silentRefreshWithRetry|scheduleTokenRefresh/);
+  assert.match(app, /function signInWithGoogle\(\)[\s\S]*client\.requestAccessToken\(\)/);
+});
