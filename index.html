@@ -8,6 +8,7 @@
 <style>
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   :root {
     --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede9;
     --text: #1a1a1a; --text2: #666; --text3: #aaa;
@@ -56,6 +57,12 @@
   .sync-dot.ok { background: #3aaa6e; }
   .sync-dot.err { background: #e24b4a; }
   .sync-time { font-size: 10px; color: var(--text3); white-space: nowrap; min-width: 58px; text-align: right; }
+  .backup-icon { display: none; }
+  .empty { line-height: 1.6; }
+  .empty strong { color: var(--text); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
   /* Tabs */
   .tabs { display: flex; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
   .tab { flex: 1; padding: 9px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; }
@@ -202,6 +209,9 @@
   .is-mobile body { padding: 0; background: var(--bg); margin: 0; width: 100%; height: 100%; overflow: hidden; }
   .is-mobile .app { height: 100dvh; min-height: 100vh; max-width: 100%; border-radius: 0; border: none; box-shadow: none; width: 100%; }
   .is-mobile .toolbar { padding: 0 10px; height: 44px; }
+  .is-mobile .sync-time { font-size: 9px; min-width: 44px; max-width: 56px; overflow: hidden; text-overflow: ellipsis; }
+  .is-mobile .backup-label { display: none; }
+  .is-mobile .backup-icon { display: inline; }
   .is-mobile #hintBar { display: none !important; }
   .is-mobile #collapseBtn { display: none; }
   .is-mobile .user-pill { max-width: 110px; font-size: 10px; }
@@ -330,7 +340,7 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <!-- Google Sign-In Screen (shown when not authenticated) -->
-<div id="signinScreen" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 32px;">
+<div id="signinScreen" role="main" aria-label="Momentum sign in" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 32px;">
   <img src="./icon-192.png" width="64" height="64" alt="" style="border-radius:14px;">
   <div style="font-size:26px;font-weight:600;color:var(--text);">Momentum</div>
   <div style="font-size:15px;color:var(--text2);text-align:center;max-width:300px;line-height:1.6;">Sign in with Google to access your tasks</div>
@@ -338,7 +348,7 @@
     <svg viewBox="0 0 24 24" width="22" height="22"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
     Sign in with Google
   </button>
-  <div id="signinError" style="font-size:13px;color:#e24b4a;display:none;">Not authorised. Contact your admin to be added to the whitelist.</div>
+  <div id="signinError" role="alert" aria-live="assertive" style="font-size:13px;color:#e24b4a;display:none;">Not authorised. Contact your admin to be added to the whitelist.</div>
 </div>
 
 <div class="app" id="app" style="visibility:hidden;">
@@ -360,15 +370,15 @@
       <button onclick="bulkMove()" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text);">Move</button>
       <button onclick="clearSelection();selectionMode=false;" style="font-size:11px;padding:3px 9px;border:0.5px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg);color:var(--text2);">✕ Deselect</button>
     </div>
-    <span id="userAvatar" onclick="switchUser()" title="Click to switch user" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--text3);color:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:background 0.3s;">?</span>
+    <button id="userAvatar" onclick="switchUser()" title="Switch user" aria-label="Switch user" style="cursor:pointer;width:28px;height:28px;padding:0;border:none;border-radius:50%;background:var(--text3);color:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:background 0.3s;">?</button>
     <span class="user-pill" id="userPill" style="display:none;"></span>
     <span class="sync-dot" id="syncDot" style="display:none;"></span>
     <span class="sync-time" id="lastSyncLabel" title="Last successful synchronization">Not synced</span>
-    <button onclick="showDataTools()" id="backupBtn" title="Backup, export, or restore tasks" aria-label="Backup and restore">Backup</button>
+    <button onclick="showDataTools()" id="backupBtn" title="Backup, export, or restore tasks" aria-label="Backup and restore"><span class="backup-label">Backup</span><span class="backup-icon" aria-hidden="true">⇩</span></button>
     <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↩</button>
     <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo">↪</button>
-    <button id="collapseBtn">Collapse all</button>
-    <button id="hideDoneBtn" onclick="toggleHideDone()" title="Toggle visibility of completed tasks">Hide done</button>
+    <button id="collapseBtn" aria-label="Collapse all projects">Collapse all</button>
+    <button id="hideDoneBtn" onclick="toggleHideDone()" title="Toggle visibility of completed tasks" aria-pressed="false">Hide done</button>
     <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)" class="desktop-only">⌕ Search</button>
     <button onclick="claimOwnership()" id="claimBtn" title="Claim ownership of all unowned nodes" style="display:none">⚑ Claim</button>
   </div>
@@ -376,15 +386,15 @@
     <span class="search-icon">⌕</span>
     <input class="search-input" id="searchInput" placeholder="Search tasks, sections, projects…" autocomplete="off" spellcheck="false" />
     <span class="search-count" id="searchCount"></span>
-    <button class="search-nav-btn" id="searchPrev" title="Previous result (↑)">↑</button>
-    <button class="search-nav-btn" id="searchNext" title="Next result (↓)">↓</button>
-    <button class="search-clear" id="searchClear" title="Clear search (Esc)">✕</button>
+    <button class="search-nav-btn" id="searchPrev" title="Previous result (↑)" aria-label="Previous search result">↑</button>
+    <button class="search-nav-btn" id="searchNext" title="Next result (↓)" aria-label="Next search result">↓</button>
+    <button class="search-clear" id="searchClear" title="Clear search (Esc)" aria-label="Clear search">✕</button>
   </div>
-  <div class="tabs">
-    <button class="tab active" data-tab="today">Today</button>
-    <button class="tab" data-tab="all">All tasks</button>
-    <button class="tab" data-tab="tree">Projects</button>
-    <button class="tab" data-tab="assigned">Assigned to me</button>
+  <div class="tabs" role="tablist" aria-label="Task views">
+    <button class="tab active" data-tab="today" role="tab" aria-selected="true">Today</button>
+    <button class="tab" data-tab="all" role="tab" aria-selected="false">All tasks</button>
+    <button class="tab" data-tab="tree" role="tab" aria-selected="false">Projects</button>
+    <button class="tab" data-tab="assigned" role="tab" aria-selected="false">Assigned to me</button>
   </div>
   <div class="today-options" id="todayOptions">
     <label class="today-watch-toggle" title="Include Done &amp; Watch items in Today">
@@ -399,7 +409,7 @@
     </label>
   </div>
   <div id="zoomCrumb" style="display:none;padding:6px 14px;font-size:11px;color:var(--text2);background:var(--bg2);border-bottom:0.5px solid var(--border);flex-shrink:0;"></div>
-  <div id="treeEl" class="tree"><div class="empty">Loading…</div></div>
+  <div id="treeEl" class="tree" role="region" aria-label="Tasks" aria-live="polite" aria-busy="true"><div class="empty" role="status">Loading your tasks…</div></div>
 
   <!-- Keyboard accessory bar — inside flex column, shows above nav when editing -->
   <div class="kb-bar" id="kbBar">
@@ -494,9 +504,10 @@ function updateLastSyncLabel() {
   if (!timestamp) { el.textContent = 'Not synced'; return; }
   var date = new Date(timestamp);
   var sameDay = date.toDateString() === new Date().toDateString();
-  el.textContent = sameDay
+  var label = sameDay
     ? 'Synced ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : 'Synced ' + date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  el.textContent = document.body.classList.contains('is-mobile') ? label.replace('Synced ', '✓ ') : label;
   el.title = 'Last successfully synced ' + date.toLocaleString();
 }
 function markLastSync() {
@@ -637,7 +648,6 @@ function showStatusBanner(message, tone, actionLabel, actionFn) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'statusBanner';
-    el.setAttribute('role', 'status');
     el.setAttribute('aria-live', 'polite');
     el.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:9px 14px;border-radius:9px;font-size:12px;z-index:6000;box-shadow:0 3px 14px rgba(0,0,0,.24);';
     document.body.appendChild(el);
@@ -649,6 +659,8 @@ function showStatusBanner(message, tone, actionLabel, actionFn) {
       : { bg: '#f0a500', fg: '#111' };
   el.style.background = colors.bg;
   el.style.color = colors.fg;
+  el.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+  el.setAttribute('aria-live', tone === 'error' ? 'assertive' : 'polite');
   el.innerHTML = '';
   var text = document.createElement('span');
   text.textContent = message;
@@ -661,7 +673,17 @@ function showStatusBanner(message, tone, actionLabel, actionFn) {
     btn.onclick = actionFn;
     el.appendChild(btn);
   }
+  var dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.textContent = '×';
+  dismiss.setAttribute('aria-label', 'Dismiss notification');
+  dismiss.style.cssText = 'border:0;background:transparent;color:inherit;padding:2px 4px;cursor:pointer;font:inherit;font-size:16px;line-height:1;';
+  dismiss.onclick = function() { el.style.display = 'none'; };
+  el.appendChild(dismiss);
   el.style.display = 'flex';
+  if (tone === 'success' && !actionLabel) {
+    setTimeout(function() { if (el.style.display !== 'none') el.style.display = 'none'; }, 5000);
+  }
   return el;
 }
 function updateQueueBanner() {
@@ -1289,6 +1311,7 @@ function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo =
 function render(preserveScroll) {
   var el = document.getElementById('treeEl');
   if (!el) return;
+  el.setAttribute('aria-busy', 'false');
   var todayOptions = document.getElementById('todayOptions');
   if (todayOptions) todayOptions.style.display = activeTab === 'today' ? 'flex' : 'none';
   var allOptions = document.getElementById('allOptions');
@@ -1309,10 +1332,10 @@ function render(preserveScroll) {
   var list = visibleList();
 
   if (!list.length) {
-    if (activeTab === 'tree') el.innerHTML = '<div class="empty">Nothing here yet.<br><button class="add-root-btn" onclick="addRoot()">+ Add first item</button></div>';
-    else if (activeTab === 'today') el.innerHTML = `<div class="section-label">${TODAYLABEL}</div><div class="empty">No tasks for today.<br><button class="add-root-btn" onclick="addTodayTask()">+ Add task</button></div>`;
-    else if (activeTab === 'assigned') el.innerHTML = '<div class="empty">No tasks assigned to you.</div>';
-    else el.innerHTML = '<div class="empty">No tasks yet.</div>';
+    if (activeTab === 'tree') el.innerHTML = '<div class="empty" role="status"><strong>No projects yet</strong><br>Create your first section or task.<br><button class="add-root-btn" onclick="addRoot()">+ Add first item</button></div>';
+    else if (activeTab === 'today') el.innerHTML = `<div class="section-label">${TODAYLABEL}</div><div class="empty" role="status"><strong>Today is clear</strong><br>No tasks are scheduled for today.<br><button class="add-root-btn" onclick="addTodayTask()">+ Add task</button></div>`;
+    else if (activeTab === 'assigned') el.innerHTML = '<div class="empty" role="status"><strong>Nothing assigned to you</strong><br>Assigned tasks will appear here.</div>';
+    else el.innerHTML = '<div class="empty" role="status"><strong>No tasks yet</strong><br>Create a task to get started.</div>';
     return;
   }
 
@@ -2151,13 +2174,51 @@ function mobileAddItem() {
   render();
 }
 
+function makeModalAccessible(bg, initialFocus) {
+  var previousFocus = document.activeElement;
+  var dialog = bg.querySelector('[role="dialog"], .modal');
+  if (dialog && !dialog.hasAttribute('role')) dialog.setAttribute('role', 'dialog');
+  if (dialog) { dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('tabindex', '-1'); }
+  function close() {
+    document.removeEventListener('keydown', onKeydown, true);
+    bg.remove();
+    if (previousFocus && previousFocus.focus) previousFocus.focus();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key !== 'Tab') return;
+    var focusable = Array.from(bg.querySelectorAll('button, input, textarea, select, [href], [tabindex]:not([tabindex="-1"])'))
+      .filter(function(el) { return !el.disabled && el.offsetParent !== null; });
+    if (!focusable.length) { e.preventDefault(); if (dialog) dialog.focus(); return; }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+  bg.addEventListener('mousedown', function(e) { if (e.target === bg) close(); });
+  document.addEventListener('keydown', onKeydown, true);
+  bg._closeAccessibleModal = close;
+  setTimeout(function() {
+    var target = initialFocus || bg.querySelector('input, textarea, button');
+    if (target && target.focus) target.focus();
+    else if (dialog) dialog.focus();
+  }, 0);
+  return close;
+}
+
+function closeAccessibleModal(bg) {
+  if (bg && bg._closeAccessibleModal) bg._closeAccessibleModal();
+  else if (bg) bg.remove();
+}
+
 function modal(html, onOk) {
   var bg = document.createElement('div'); bg.className = 'modal-bg';
-  bg.innerHTML = `<div class="modal">${html}<div class="modal-btns"><button class="cancel-btn">Cancel</button><button class="ok-btn primary">Save</button></div></div>`;
+  bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}<div class="modal-btns"><button class="cancel-btn">Cancel</button><button class="ok-btn primary">Save</button></div></div>`;
   document.body.appendChild(bg);
-  bg.querySelector('.cancel-btn').onclick = () => bg.remove();
-  bg.querySelector('.ok-btn').onclick = () => { onOk(bg); bg.remove(); };
-  bg.querySelector('input, textarea')?.focus();
+  var firstField = bg.querySelector('input, textarea');
+  makeModalAccessible(bg, firstField);
+  bg.querySelector('.cancel-btn').onclick = () => closeAccessibleModal(bg);
+  bg.querySelector('.ok-btn').onclick = () => { onOk(bg); closeAccessibleModal(bg); };
 }
 
 // ── Backup, export, and recovery ─────────────────────────────────────────────
@@ -2222,11 +2283,12 @@ function showDataTools() {
     '<div class="modal-btns"><button type="button" class="cancel-btn">Close</button></div>' +
   '</div>';
   document.body.appendChild(bg);
-  bg.querySelector('[data-backup-json]').onclick = function() { exportBackupJSON(); bg.remove(); };
-  bg.querySelector('[data-backup-csv]').onclick = function() { exportBackupCSV(); bg.remove(); };
-  bg.querySelector('[data-restore-json]').onclick = function() { bg.remove(); chooseBackupFile(); };
-  bg.querySelector('.cancel-btn').onclick = function() { bg.remove(); };
-  bg.querySelector('[data-backup-json]').focus();
+  var firstAction = bg.querySelector('[data-backup-json]');
+  makeModalAccessible(bg, firstAction);
+  bg.querySelector('[data-backup-json]').onclick = function() { exportBackupJSON(); closeAccessibleModal(bg); };
+  bg.querySelector('[data-backup-csv]').onclick = function() { exportBackupCSV(); closeAccessibleModal(bg); };
+  bg.querySelector('[data-restore-json]').onclick = function() { closeAccessibleModal(bg); chooseBackupFile(); };
+  bg.querySelector('.cancel-btn').onclick = function() { closeAccessibleModal(bg); };
 }
 
 function chooseBackupFile() {
@@ -2302,9 +2364,10 @@ function previewBackupRestore(data) {
     '<div class="modal-btns"><button type="button" class="cancel-btn">Cancel</button><button type="button" class="ok-btn primary">Restore</button></div>' +
   '</div>';
   document.body.appendChild(bg);
-  bg.querySelector('.cancel-btn').onclick = function() { bg.remove(); };
-  bg.querySelector('.ok-btn').onclick = function() { bg.remove(); restoreBackupNodes(restored); };
-  bg.querySelector('.cancel-btn').focus();
+  var cancelBtn = bg.querySelector('.cancel-btn');
+  makeModalAccessible(bg, cancelBtn);
+  cancelBtn.onclick = function() { closeAccessibleModal(bg); };
+  bg.querySelector('.ok-btn').onclick = function() { closeAccessibleModal(bg); restoreBackupNodes(restored); };
 }
 
 function restoreBackupNodes(restored) {
@@ -3436,7 +3499,10 @@ function toggleHideDone() {
   hideDone = !hideDone;
   localStorage.setItem('momentum_hide_done', hideDone);
   var btn = document.getElementById('hideDoneBtn');
-  if (btn) btn.textContent = hideDone ? 'Show done' : 'Hide done';
+  if (btn) {
+    btn.textContent = hideDone ? 'Show done' : 'Hide done';
+    btn.setAttribute('aria-pressed', hideDone ? 'true' : 'false');
+  }
   render(true);
 }
 
@@ -5155,7 +5221,7 @@ function bootApp() {
       var tree = document.getElementById('treeEl');
       if (tree) {
         tree.innerHTML =
-          '<div class="empty" style="padding:32px;">Connection error: ' + esc(msg) +
+          '<div class="empty" role="alert" style="padding:32px;"><strong>Momentum could not connect</strong><br>' + esc(msg) +
           '<br><br><button onclick="bootApp()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:14px;">Retry</button></div>';
       }
       showApp();
@@ -5192,17 +5258,23 @@ if ('serviceWorker' in navigator) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  updateLastSyncLabel();
   checkMobile();
-  setTimeout(checkMobile, 300);
-  setTimeout(checkMobile, 1000);
+  updateLastSyncLabel();
+  setTimeout(function() { checkMobile(); updateLastSyncLabel(); }, 300);
+  setTimeout(function() { checkMobile(); updateLastSyncLabel(); }, 1000);
+  var initialHideDoneBtn = document.getElementById('hideDoneBtn');
+  if (initialHideDoneBtn) {
+    initialHideDoneBtn.textContent = hideDone ? 'Show done' : 'Hide done';
+    initialHideDoneBtn.setAttribute('aria-pressed', hideDone ? 'true' : 'false');
+  }
   document.querySelectorAll('.tab').forEach(function(t) {
     t.onclick = function() {
       pushUndo();
       activeTab = t.dataset.tab;
       if (activeTab !== 'tree') zoomedId = null;
-      document.querySelectorAll('.tab').forEach(function(x) { x.classList.remove('active'); });
+      document.querySelectorAll('.tab').forEach(function(x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
       t.classList.add('active');
+      t.setAttribute('aria-selected', 'true');
       updateZoomCrumb();
       render();
     };
