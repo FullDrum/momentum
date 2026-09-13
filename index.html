@@ -1,5 +1,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Momentum – Task Manager</title>
+<meta name="theme-color" content="#17212B">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+<link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png">
 <style>
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -320,12 +325,12 @@
   .kb-btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
 </style>
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="./manifest.json">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <!-- Google Sign-In Screen (shown when not authenticated) -->
-<div id="signinScreen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 32px;">
-  <svg width="48" height="48" viewBox="0 0 64 64" style="border-radius:12px;"><rect width="64" height="64" rx="14" fill="#1a1a1a"/><text x="32" y="46" font-family="-apple-system,sans-serif" font-size="38" font-weight="700" fill="white" text-anchor="middle">M</text></svg>
+<div id="signinScreen" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 32px;">
+  <img src="./icon-192.png" width="64" height="64" alt="" style="border-radius:14px;">
   <div style="font-size:26px;font-weight:600;color:var(--text);">Momentum</div>
   <div style="font-size:15px;color:var(--text2);text-align:center;max-width:300px;line-height:1.6;">Sign in with Google to access your tasks</div>
   <button id="googleSignInBtn" onclick="signInWithGoogle()" style="display:flex;align-items:center;gap:12px;padding:14px 28px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:16px;font-weight:500;cursor:pointer;font-family:inherit;">
@@ -335,7 +340,7 @@
   <div id="signinError" style="font-size:13px;color:#e24b4a;display:none;">Not authorised. Contact your admin to be added to the whitelist.</div>
 </div>
 
-<div class="app" id="app">
+<div class="app" id="app" style="visibility:hidden;">
   <div class="toolbar">
     <div id="hintBar" class="hint-bar">
       <span class="kbd">Enter</span> new &nbsp;
@@ -357,8 +362,8 @@
     <span id="userAvatar" onclick="switchUser()" title="Click to switch user" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--text3);color:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:background 0.3s;">?</span>
     <span class="user-pill" id="userPill" style="display:none;"></span>
     <span class="sync-dot" id="syncDot" style="display:none;"></span>
-    <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)">↩</button>
-    <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)">↪</button>
+    <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↩</button>
+    <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo">↪</button>
     <button id="collapseBtn">Collapse all</button>
     <button id="hideDoneBtn" onclick="toggleHideDone()" title="Toggle visibility of completed tasks">Hide done</button>
     <button onclick="toggleSearch()" id="searchBtn" title="Search (/ or Ctrl+Shift+F)" class="desktop-only">⌕ Search</button>
@@ -607,6 +612,38 @@ function setSyncDot(state) {
 
 // Update the unsaved-changes banner. Shown when queue is non-empty for >5s.
 var queueBannerTimer = null;
+function showStatusBanner(message, tone, actionLabel, actionFn) {
+  var el = document.getElementById('statusBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'statusBanner';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:9px 14px;border-radius:9px;font-size:12px;z-index:6000;box-shadow:0 3px 14px rgba(0,0,0,.24);';
+    document.body.appendChild(el);
+  }
+  var colors = tone === 'error'
+    ? { bg: '#b42318', fg: '#fff' }
+    : tone === 'success'
+      ? { bg: '#16794a', fg: '#fff' }
+      : { bg: '#f0a500', fg: '#111' };
+  el.style.background = colors.bg;
+  el.style.color = colors.fg;
+  el.innerHTML = '';
+  var text = document.createElement('span');
+  text.textContent = message;
+  el.appendChild(text);
+  if (actionLabel && actionFn) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = actionLabel;
+    btn.style.cssText = 'border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;padding:3px 8px;cursor:pointer;font:inherit;font-weight:600;white-space:nowrap;';
+    btn.onclick = actionFn;
+    el.appendChild(btn);
+  }
+  el.style.display = 'flex';
+  return el;
+}
 function updateQueueBanner() {
   // Built lazily on first non-empty queue
   var b = document.getElementById('queueBanner');
@@ -626,7 +663,7 @@ function updateQueueBanner() {
       if (!el) {
         el = document.createElement('div');
         el.id = 'queueBanner';
-        el.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:#f0a500;color:#000;padding:6px 14px;border-radius:8px;font-size:12px;z-index:5000;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;';
+        el.style.cssText = 'position:fixed;bottom:56px;left:50%;transform:translateX(-50%);background:#f0a500;color:#000;padding:6px 14px;border-radius:8px;font-size:12px;z-index:5000;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;';
         el.title = 'Click to retry now';
         el.onclick = function() { flushBatch(true); };
         document.body.appendChild(el);
@@ -638,11 +675,11 @@ function updateQueueBanner() {
 }
 
 // Flush the current queue as one batched request.
-// force: if true, bypass the in-flight guard (used by the banner click).
+// Never run two batches concurrently; ordering is essential for edits and deletes.
 function flushBatch(force) {
   if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
   if (queueIsEmpty()) { mlog('flushBatch: queue empty, nothing to do'); updateQueueBanner(); return Promise.resolve(); }
-  if (batchInFlight && !force) { mlog('flushBatch: in-flight, skipping'); return Promise.resolve(); }
+  if (batchInFlight) { mlog('flushBatch: in-flight, skipping'); return Promise.resolve(); }
 
   var snapSaves = Object.values(queueState.saves).map(function(n){ return Object.assign({}, n); });
   var snapDeletes = Object.keys(queueState.deletes);
@@ -672,9 +709,11 @@ function flushBatch(force) {
         (resp.results.saves || []).forEach(function(r) {
           if (r && r.error) {
             console.warn('Save error for', r.id, ':', r.error);
-            // Permission errors (someone else owns it) shouldn't loop forever.
-            // Drop and surface to console; the user can refresh to see truth.
-            if (r.error === 'Permission denied') return;
+            // Permission errors should not retry forever, but must be visible.
+            if (r.error === 'Permission denied') {
+              showStatusBanner('A change could not be saved because you do not have permission. Your local view still contains it.', 'error', 'Refresh', function() { location.reload(); });
+              return;
+            }
             // Re-queue with the latest snapshot from local nodes (in case the
             // user touched it again while the batch was in flight)
             var n = nodes.find(function(x){ return x.id === r.id; });
@@ -701,6 +740,7 @@ function flushBatch(force) {
       opQueueDepth = 0;
       console.error('Batch failed:', e && e.message);
       setSyncDot('err');
+      showStatusBanner('Momentum is offline or could not sync. Your changes are retained on this device.', 'error', 'Retry', function() { flushBatch(true); });
       // Re-queue everything we just tried
       snapSaves.forEach(function(n) {
         // Prefer the latest local copy (user may have typed more) over our snapshot
@@ -857,12 +897,23 @@ function silentRefreshToken() {
   if (_silentRefreshPromise) { mlog('silentRefreshToken: dedup, in-flight'); return _silentRefreshPromise; }
   mlog('silentRefreshToken: starting. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
   _silentRefreshPromise = new Promise(function(resolve, reject) {
+    var settled = false;
+    var timeout = setTimeout(function() {
+      if (settled) return;
+      settled = true;
+      _silentRefreshPromise = null;
+      var err = new Error('Google sign-in timed out');
+      err.fatal = false;
+      reject(err);
+    }, 6000);
     try {
       var hint = localStorage.getItem('momentum_user_email') || '';
       mlog('silentRefreshToken: hint=', hint);
       if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
         var ge = new Error('GSI not loaded');
         ge.fatal = false;
+        clearTimeout(timeout);
+        settled = true;
         _silentRefreshPromise = null;
         merror('silentRefreshToken: GSI library not available');
         reject(ge);
@@ -874,6 +925,9 @@ function silentRefreshToken() {
         prompt: 'none',       // truly silent — no UI at all
         login_hint: hint,     // skip account chooser
         callback: function(response) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
           _silentRefreshPromise = null;
           mlog('silentRefreshToken: callback. error=', response.error || 'none', 'has token?', !!response.access_token);
           if (response.error) {
@@ -896,6 +950,9 @@ function silentRefreshToken() {
       });
       client.requestAccessToken();
     } catch(e) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       _silentRefreshPromise = null;
       merror('silentRefreshToken: threw', e && e.message);
       reject(e);
@@ -974,7 +1031,12 @@ function signOut() {
     showSignIn();
   };
   if (queueIsEmpty()) { done(); }
-  else { flushNow(3000).then(done); }
+  else {
+    flushNow(5000).then(function(saved) {
+      if (saved) { done(); return; }
+      showStatusBanner('Could not switch users because there are unsaved changes. Check your connection and retry.', 'error', 'Retry sync', function() { flushBatch(true); });
+    });
+  }
 }
 
 function showSignIn() {
@@ -4915,7 +4977,28 @@ function bootApp() {
 
 // Register service worker for PWA
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function(e) {
+  var refreshingForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (refreshingForUpdate) return;
+    refreshingForUpdate = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js').then(function(reg) {
+    function offerUpdate(worker) {
+      showStatusBanner('A new version of Momentum is ready.', 'success', 'Update now', function() {
+        worker.postMessage({ type: 'SKIP_WAITING' });
+      });
+    }
+    if (reg.waiting) offerUpdate(reg.waiting);
+    reg.addEventListener('updatefound', function() {
+      var worker = reg.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', function() {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(worker);
+      });
+    });
+    reg.update();
+  }).catch(function(e) {
     console.log('SW registration failed:', e);
   });
 }

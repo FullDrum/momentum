@@ -1,22 +1,52 @@
-// Momentum Service Worker
-const CACHE_NAME = 'momentum-v2';
+const CACHE_NAME = 'momentum-v3';
+const APP_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
+];
 
-self.addEventListener('install', function(e) {
-  self.skipWaiting();
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)));
 });
 
-self.addEventListener('activate', function(e) {
-  e.waitUntil(clients.claim());
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-self.addEventListener('fetch', function(e) {
-  // Only handle same-origin requests. Cross-origin requests (Apps Script,
-  // Google APIs, etc.) must go directly to the network — the SW cannot
-  // proxy them without breaking redirects and CORS.
-  var url = new URL(e.request.url);
-  if (url.origin !== self.location.origin) {
-    return; // let the browser handle it natively
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    Promise.all([
+      caches.keys().then(keys => Promise.all(
+        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      )),
+      self.clients.claim()
+    ])
+  );
+});
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
   }
-  // For same-origin, just pass through (no caching).
-  e.respondWith(fetch(e.request));
+
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+      if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+      return response;
+    }))
+  );
 });

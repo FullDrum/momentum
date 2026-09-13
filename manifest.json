@@ -1,11 +1,12 @@
 {
   "name": "Momentum",
   "short_name": "Momentum",
-  "description": "Task manager backed by Google Sheets",
-  "start_url": "/",
+  "description": "Momentum task manager",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#1a1a1a",
-  "theme_color": "#1a1a1a",
+  "background_color": "#17212B",
+  "theme_color": "#17212B",
   "orientation": "portrait",
   "icons": [
     {
