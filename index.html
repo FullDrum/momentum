@@ -63,6 +63,11 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
   }
+  /* The shortcut guide needs a genuinely wide toolbar. Hide it before it
+     wraps or competes with the action controls. */
+  @media (max-width: 1200px) {
+    #hintBar { display: none !important; }
+  }
   /* Tabs */
   .tabs { display: flex; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
   .tab { flex: 1; padding: 9px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; }
