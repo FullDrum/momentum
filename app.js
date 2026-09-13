@@ -445,7 +445,7 @@ async function fetchAll(initial) {
 }
 
 // ── PWA Config — fill these in ───────────────────────────────────────────────
-var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxWSPqbUuKMS0YceLzG2Khz6wwCJYO_ZJtU5l3q51Wgc6oT1nD7Z1XH7oz_J7S5ubx7/exec';
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbweX3x7fglJ-R78DROUj4DPfqWfw9SosOqPX4htozEAcIPEvS3o5U52cL8WGGAsSzaH/exec';
 var GOOGLE_CLIENT_ID = '913817622885-l3r8vmm1lldqlhlp9d2jaodm0kvs75ko.apps.googleusercontent.com';
 
 // ── Auth state ────────────────────────────────────────────────────────────────

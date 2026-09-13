@@ -21,3 +21,8 @@ test('offline cache includes every extracted application asset', () => {
     assert.ok(worker.includes(`'${asset}'`), `${asset} must be cached`);
   }
 });
+
+test('application uses the active Apps Script deployment', () => {
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.match(app, /AKfycbweX3x7fglJ-R78DROUj4DPfqWfw9SosOqPX4htozEAcIPEvS3o5U52cL8WGGAsSzaH\/exec/);
+});
