@@ -1,7 +1,10 @@
-const CACHE_NAME = 'momentum-v7';
+const CACHE_NAME = 'momentum-v8';
 const APP_ASSETS = [
   './',
   './index.html',
+  './styles.css',
+  './core.js',
+  './app.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
