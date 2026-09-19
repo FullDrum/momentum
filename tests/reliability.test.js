@@ -64,7 +64,7 @@ function deferred() {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-const ack = (saves = [], deletes = []) => ({ results: { saves: saves.map(id => ({ id })), deletes: deletes.map(id => ({ id })) } });
+const ack = (saves = [], deletes = []) => ({ results: { saves: saves.map(id => ({ id, ok: true })), deletes: deletes.map(id => ({ id, ok: true })) } });
 
 test('closing during a save preserves the durable operation and reload overlays it onto server data', async () => {
   const a = app(); a.login();
@@ -99,7 +99,7 @@ test('a failed in-flight save cannot resurrect a task deleted during the request
 test('partial, missing and malformed acknowledgements retain unsuccessful operations', async () => {
   const a = app(); a.login();
   a.c.queueSave({ id: 'a', name: 'Accepted' }); a.c.queueSave({ id: 'b', name: 'Denied' }); a.c.queueDelete('c');
-  a.c.gsr = () => Promise.resolve({ results: { saves: [{ id: 'a' }, { id: 'b', error: 'Permission denied' }], deletes: [] } });
+  a.c.gsr = () => Promise.resolve({ results: { saves: [{ id: 'a', ok: true }, { id: 'b', error: 'Permission denied' }], deletes: [] } });
   await a.c.flushBatch();
   assert.equal(a.c.queueState.saves.a, undefined);
   assert.equal(a.c.queueState.saves.b.name, 'Denied');
@@ -118,6 +118,17 @@ test('switching accounts times out without clearing credentials or queued work',
   assert.equal(a.c.currentUser, 'alice@example.com');
   assert.equal(a.storage.get('momentum_session_token'), 'session');
   assert.equal(JSON.parse(a.storage.get(a.c.QUEUE_KEY)).saves.a.name, 'Pending');
+});
+
+test('an explicit successful acknowledgement is required for saves and deletes', async () => {
+  const a = app(); a.login();
+  a.c.queueSave({ id: 'a', name: 'Pending' }); a.c.queueDelete('b');
+  for (const value of [undefined, false]) {
+    a.c.gsr = () => Promise.resolve({ results: { saves: [{ id: 'a', ok: value }], deletes: [{ id: 'b', ok: value }] } });
+    await a.c.flushBatch();
+    assert.equal(a.c.queueState.saves.a.name, 'Pending');
+    assert.equal(a.c.queueState.deletes.b, true);
+  }
 });
 
 test('flushNow waits for an in-flight request even if undo has left no pending entries', async () => {

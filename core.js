@@ -95,12 +95,12 @@
     var errors = false;
     saves.forEach(function(n) {
       var result = response.results.saves.find(function(r) { return r && r.id === n.id; });
-      if (!result || result.error) { errors = true; return; }
+      if (!result || result.ok !== true || result.error) { errors = true; return; }
       if (queue.saves[n.id] && JSON.stringify(queue.saves[n.id]) === JSON.stringify(n)) delete queue.saves[n.id];
     });
     deletes.forEach(function(id) {
       var result = response.results.deletes.find(function(r) { return r && r.id === id; });
-      if (!result || result.error) { errors = true; return; }
+      if (!result || result.ok !== true || result.error) { errors = true; return; }
       delete queue.deletes[id];
     });
     return errors;

@@ -20,10 +20,21 @@ is stubbed; these are not signed-in browser or live backend tests.
 
 ## Before production deployment
 
-The Apps Script source is outside this repository. Confirm against a test Sheet:
+The Apps Script source is outside this repository. On 19 September 2026, read-only
+inspection confirmed that the active endpoint uses version 292 and its Code.gs
+exactly matches the current editor source.
+
+The source returns the required acknowledgement arrays and updates existing saves
+by task ID. Repeated deletion of an absent ID succeeds. However, version 292
+fabricates successful bulk-delete acknowledgements for permission-denied tasks.
+A separate two-function backend replacement has been prepared and tested locally;
+it must be applied and deployed before this frontend release. No production
+backend or Sheet was modified during review.
+
+Confirm against a test Sheet before release:
 
 - `batchOps` returns `results.saves` and `results.deletes` arrays containing an
-  `{ id }` acknowledgement per successful operation, and `{ id, error }` for
+  `{ id, ok: true }` acknowledgement per successful operation, and `{ id, error }` for
   failures. A missing acknowledgement leaves the operation pending.
 - Retrying a save with the same task ID updates the same record; retrying a delete
   for an already deleted task succeeds. A connection can fail after the server
@@ -35,4 +46,6 @@ The Apps Script source is outside this repository. Confirm against a test Sheet:
 
 This change does not provide server-side concurrent-edit conflict resolution or
 cross-tab transaction locking. Those require separate backend/client coordination.
+The backend source also has no write locking, so sequential replay support is not
+a guarantee against simultaneous write races.
 The UI feature proposals are not part of this reliability change.
