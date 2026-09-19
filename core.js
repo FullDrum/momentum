@@ -53,9 +53,62 @@
 
   function nodeChanged(a, b) {
     if (!a || !b) return true;
-    return a.name !== b.name || a.parentId !== b.parentId ||
-      a.isSection !== b.isSection || a.done !== b.done ||
-      a.watching !== b.watching || a.date !== b.date || a.order !== b.order;
+    // Compare persisted fields, including assignment, sharing and completion.
+    // readOnlyContext is a server-derived permission hint, not editable state.
+    var keys = new Set(Object.keys(a).concat(Object.keys(b)));
+    return Array.from(keys).some(function(key) {
+      return key !== 'readOnlyContext' && JSON.stringify(a[key]) !== JSON.stringify(b[key]);
+    });
+  }
+
+  function queueForRestore(queue, currentNodes, targetNodes) {
+    var next = emptyQueue();
+    var target = {};
+    targetNodes.forEach(function(n) { target[n.id] = n; });
+    var diff = diffForRestore(currentNodes, targetNodes);
+    var dirty = new Set(Object.keys(queue.saves).concat(Object.keys(queue.deletes)));
+    diff.saves.concat(diff.deletes).forEach(function(n) { dirty.add(n.id); });
+    dirty.forEach(function(id) {
+      if (target[id]) enqueueSave(next, target[id]);
+      else enqueueDelete(next, id);
+    });
+    return next;
+  }
+
+  function overlayQueue(serverNodes, queue) {
+    var seen = new Set();
+    var result = [];
+    serverNodes.forEach(function(n) {
+      seen.add(n.id);
+      if (!queue.deletes[n.id]) result.push(queue.saves[n.id] || n);
+    });
+    Object.keys(queue.saves).forEach(function(id) {
+      if (!seen.has(id) && !queue.deletes[id]) result.push(queue.saves[id]);
+    });
+    return result;
+  }
+
+  function acknowledgeBatch(queue, saves, deletes, response) {
+    // Missing acknowledgements must never erase the only durable copy.
+    if (!response || !response.results || !Array.isArray(response.results.saves) ||
+        !Array.isArray(response.results.deletes)) throw new Error('Missing save acknowledgement');
+    var errors = false;
+    saves.forEach(function(n) {
+      var result = response.results.saves.find(function(r) { return r && r.id === n.id; });
+      if (!result || result.ok !== true || result.error) { errors = true; return; }
+      if (queue.saves[n.id] && JSON.stringify(queue.saves[n.id]) === JSON.stringify(n)) delete queue.saves[n.id];
+    });
+    deletes.forEach(function(id) {
+      var result = response.results.deletes.find(function(r) { return r && r.id === id; });
+      if (!result || result.ok !== true || result.error) { errors = true; return; }
+      delete queue.deletes[id];
+    });
+    return errors;
+  }
+
+  function localDay(date) {
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') +
+      '-' + String(date.getDate()).padStart(2, '0');
   }
 
   function diffForRestore(currentNodes, targetNodes) {
@@ -100,6 +153,7 @@
   }
 
   return { emptyQueue: emptyQueue, restoreQueue: restoreQueue, enqueueSave: enqueueSave,
+    queueForRestore: queueForRestore, overlayQueue: overlayQueue, acknowledgeBatch: acknowledgeBatch, localDay: localDay,
     enqueueDelete: enqueueDelete, tokenIsValid: tokenIsValid, snapshotState: snapshotState,
     diffForRestore: diffForRestore, validateBackup: validateBackup };
 });

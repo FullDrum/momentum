@@ -1,8 +1,19 @@
 // ── Config ───────────────────────────────────────────────────────────────────
 var COLLAPSED_KEY = 'momentum_collapsed';
 var LAST_SYNC_KEY = 'momentum_last_sync_at';
-var TODAY = (() => { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+var TODAY = MomentumCore.localDay(new Date());
 var TODAYLABEL = new Date().toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
+
+function refreshToday() {
+  var now = new Date();
+  var day = MomentumCore.localDay(now);
+  if (day === TODAY) return false;
+  saveActiveInput();
+  TODAY = day;
+  TODAYLABEL = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  if (currentUser) render(true);
+  return true;
+}
 
 // ── Diagnostic logger ────────────────────────────────────────────────────────
 // Filter console for "MOM" to see only Momentum logs.
@@ -78,7 +89,10 @@ function markLastSync() {
 //     state after an undo.
 // ═════════════════════════════════════════════════════════════════════════════
 
-var QUEUE_KEY = 'momentum_pending_queue';
+var LEGACY_QUEUE_KEY = 'momentum_pending_queue';
+var QUEUE_KEY = null;
+var queueOwner = null;
+var syncAccountReady = false;
 var TOUCHED_WINDOW_MS = 5000;       // reconciliation window — local edits younger than this beat server
 var FLUSH_DEBOUNCE_MS = 1500;       // wait this long after a mutation before flushing
 var BACKOFF_BASE_MS = 1500;         // initial backoff after a failed batch
@@ -108,15 +122,56 @@ var opGeneration = 0;                          // legacy alias kept in sync with
 var opQueueDepth = 0;                          // legacy: 0 when no batch in flight, 1 when in flight
 var syncTimer = null;                          // legacy: kept null; flushTimer replaces it
 
-function loadQueue() {
-  try {
-    var raw = localStorage.getItem(QUEUE_KEY);
-    queueState = MomentumCore.restoreQueue(raw);
-  } catch(e) { console.warn('Could not load queue from localStorage:', e); }
+function loadQueue(email) {
+  var owner = String(email || '').trim().toLowerCase();
+  if (!owner) throw new Error('A verified account is required to restore changes');
+  var key = LEGACY_QUEUE_KEY + ':' + encodeURIComponent(owner);
+  var raw = localStorage.getItem(key);
+  var legacy = localStorage.getItem(LEGACY_QUEUE_KEY);
+  var legacyOwnerKey = LEGACY_QUEUE_KEY + '_owner';
+  var legacyOwner = localStorage.getItem(legacyOwnerKey);
+  if (legacy !== null && legacyOwner === null) {
+    legacyOwner = (localStorage.getItem('momentum_user_email') || '').trim().toLowerCase() || '__unknown__';
+    localStorage.setItem(legacyOwnerKey, legacyOwner);
+  }
+  // Migrate only a queue attributable to this verified account. Preserve unknown
+  // legacy data rather than replaying it into a different account.
+  var migrate = raw === null && legacy !== null && legacyOwner === owner;
+  var source = migrate ? legacy : raw;
+  // Do not overwrite malformed recovery data with an empty queue.
+  if (source !== null) {
+    var parsed = JSON.parse(source);
+    if (!parsed || !parsed.saves || !parsed.deletes ||
+        typeof parsed.saves !== 'object' || typeof parsed.deletes !== 'object' ||
+        Array.isArray(parsed.saves) || Array.isArray(parsed.deletes)) throw new Error('Stored changes need recovery');
+  }
+  var restored = MomentumCore.restoreQueue(source);
+  if (migrate) {
+    localStorage.setItem(key, JSON.stringify(restored));
+    localStorage.removeItem(LEGACY_QUEUE_KEY);
+    localStorage.removeItem(legacyOwnerKey);
+  }
+  if (queueOwner !== owner) {
+    bumpGeneration();
+    nodes = [];
+    nodeTouched = {};
+    undoStack = [];
+    redoStack = [];
+  }
+  queueOwner = owner;
+  QUEUE_KEY = key;
+  queueState = restored;
 }
 function persistQueue() {
-  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queueState)); }
-  catch(e) { console.warn('Could not persist queue:', e); }
+  try {
+    if (!QUEUE_KEY) throw new Error('No verified account for pending changes');
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queueState));
+    return true;
+  } catch(e) {
+    console.warn('Could not persist queue:', e);
+    showStatusBanner('Changes could not be stored on this device. Keep Momentum open and retry saving.', 'error');
+    return false;
+  }
 }
 function queueIsEmpty() {
   return Object.keys(queueState.saves).length === 0 &&
@@ -251,16 +306,14 @@ function updateQueueBanner() {
 // Never run two batches concurrently; ordering is essential for edits and deletes.
 function flushBatch(force) {
   if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (!syncAccountReady || !queueOwner) return Promise.resolve();
   if (queueIsEmpty()) { mlog('flushBatch: queue empty, nothing to do'); updateQueueBanner(); return Promise.resolve(); }
   if (batchInFlight) { mlog('flushBatch: in-flight, skipping'); return Promise.resolve(); }
 
-  var snapSaves = Object.values(queueState.saves).map(function(n){ return Object.assign({}, n); });
+  // Keep the durable queue intact until each operation is acknowledged.
+  var snapSaves = Object.values(queueState.saves).map(function(n) { return Object.assign({}, n); });
   var snapDeletes = Object.keys(queueState.deletes);
-  mlog('flushBatch: starting. saves=', snapSaves.length, 'deletes=', snapDeletes.length);
-  queueState.saves = {};
-  queueState.deletes = {};
-  persistQueue();
-
+  if (!persistQueue()) return Promise.resolve();
   batchInFlight = true;
   opQueueDepth = 1;
   var thisGen = batchGeneration;
@@ -268,70 +321,32 @@ function flushBatch(force) {
 
   return gsr('batchOps', { saves: snapSaves, deletes: snapDeletes })
     .then(function(resp) {
-      mlog('flushBatch: response received', resp);
-      batchInFlight = false;
-      opQueueDepth = 0;
-      // If undo happened while we were in flight, ignore this result and ship
-      // a fresh batch built from the post-undo state.
-      if (thisGen !== batchGeneration) {
-        if (!queueIsEmpty()) armFlush();
-        return;
-      }
-      if (resp && resp.results) {
-        // Re-queue any per-item failures
-        (resp.results.saves || []).forEach(function(r) {
-          if (r && r.error) {
-            console.warn('Save error for', r.id, ':', r.error);
-            // Permission errors should not retry forever, but must be visible.
-            if (r.error === 'Permission denied') {
-              showStatusBanner('A change could not be saved because you do not have permission. Your local view still contains it.', 'error', 'Refresh', function() { location.reload(); });
-              return;
-            }
-            // Re-queue with the latest snapshot from local nodes (in case the
-            // user touched it again while the batch was in flight)
-            var n = nodes.find(function(x){ return x.id === r.id; });
-            if (n) queueState.saves[r.id] = Object.assign({}, n);
-          }
-        });
-        (resp.results.deletes || []).forEach(function(r) {
-          if (r && r.error) {
-            console.warn('Delete error for', r.id, ':', r.error);
-            queueState.deletes[r.id] = true;
-          }
-        });
-        persistQueue();
-      }
-      // Reset backoff on success
+      // Undo/redo leaves a replacement queue; an old response cannot clear it.
+      if (thisGen !== batchGeneration) return;
+      var resultErrors = MomentumCore.acknowledgeBatch(queueState, snapSaves, snapDeletes, resp);
+      persistQueue();
+      if (resultErrors) throw new Error('Some changes were not acknowledged or permission was denied');
       batchBackoffMs = BACKOFF_BASE_MS;
       setSyncDot('ok');
-      var resultErrors = resp && resp.results &&
-        (resp.results.saves || []).concat(resp.results.deletes || []).some(function(r) { return r && r.error; });
-      // Anything queued during the flight? Schedule another batch.
-      if (!queueIsEmpty()) armFlush();
-      else {
-        updateQueueBanner();
-        if (!resultErrors) markLastSync();
-      }
+      if (queueIsEmpty()) markLastSync();
     })
     .catch(function(e) {
-      batchInFlight = false;
-      opQueueDepth = 0;
+      if (thisGen !== batchGeneration) return;
+      // Do not reinsert old snapshots: the durable queue already holds the latest
+      // saves/deletes, including edits made while this request was in flight.
       console.error('Batch failed:', e && e.message);
       setSyncDot('err');
-      showStatusBanner('Momentum is offline or could not sync. Your changes are retained on this device.', 'error', 'Retry', function() { flushBatch(true); });
-      // Re-queue everything we just tried
-      snapSaves.forEach(function(n) {
-        // Prefer the latest local copy (user may have typed more) over our snapshot
-        var live = nodes.find(function(x){ return x.id === n.id; });
-        queueState.saves[n.id] = live ? Object.assign({}, live) : n;
-      });
-      snapDeletes.forEach(function(id) { queueState.deletes[id] = true; });
-      persistQueue();
-      updateQueueBanner();
-      // Exponential backoff
-      var delay = batchBackoffMs;
+      showStatusBanner('Some changes could not sync. They remain on this device. Check your connection or access and retry.', 'error', 'Retry', function() { flushBatch(true); });
       batchBackoffMs = Math.min(batchBackoffMs * 2, BACKOFF_MAX_MS);
-      flushTimer = setTimeout(flushBatch, delay);
+    })
+    .finally(function() {
+      batchInFlight = false;
+      opQueueDepth = 0;
+      updateQueueBanner();
+      if (!queueIsEmpty() && syncAccountReady) {
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = setTimeout(flushBatch, batchBackoffMs);
+      }
     });
 }
 
@@ -343,7 +358,7 @@ function flushNow(timeoutMs) {
   return new Promise(function(resolve) {
     var deadline = Date.now() + timeoutMs;
     function tick() {
-      if (queueIsEmpty()) { resolve(true); return; }
+      if (queueIsEmpty() && !batchInFlight) { resolve(true); return; }
       if (Date.now() >= deadline) { resolve(false); return; }
       if (!batchInFlight) flushBatch();
       setTimeout(tick, 200);
@@ -369,9 +384,10 @@ function bumpGeneration() {
 //   - The node currently being edited in an active textarea
 // initial: true on app boot (we have no local state to protect, so full replace)
 async function fetchAll(initial) {
+  var fetchingOwner = queueOwner;
   var clientEmail = localStorage.getItem('momentum_user_email') || currentUser || '';
   var data = await gsr('getInitialData', clientEmail || null);
-  if (!data) return;
+  if (!data || fetchingOwner !== queueOwner) return;
   if (data.user) {
     currentUser = data.user;
     localStorage.setItem('momentum_user_email', data.user);
@@ -385,8 +401,10 @@ async function fetchAll(initial) {
     avatar.title = currentUser + ' — click to sign out';
   }
 
-  var serverNodes = normalizeNodes(data.nodes || []);
-  gsr('getTeamMembers').then(function(members) { teamMembers = members || []; }).catch(function(){});
+  var serverNodes = MomentumCore.overlayQueue(normalizeNodes(data.nodes || []), queueState);
+  gsr('getTeamMembers').then(function(members) {
+    if (fetchingOwner === queueOwner) teamMembers = members || [];
+  }).catch(function(){});
 
   if (initial) {
     // Fresh boot — no local state worth preserving. Just load server state.
@@ -441,7 +459,7 @@ async function fetchAll(initial) {
   var claimBtn = document.getElementById('claimBtn');
   if (claimBtn) claimBtn.style.display = (hasUnowned && currentUser) ? 'inline-block' : 'none';
   render(!initial); // preserve scroll on reconciliation fetches
-  markLastSync();
+  if (queueIsEmpty() && !batchInFlight) markLastSync();
 }
 
 // ── PWA Config — fill these in ───────────────────────────────────────────────
@@ -458,6 +476,7 @@ function isTokenValid() {
 }
 
 function signInWithGoogle() {
+  syncAccountReady = false;
   mlog('signInWithGoogle: invoked. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
   if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
     merror('signInWithGoogle: GSI not loaded yet, retrying in 500ms');
@@ -490,27 +509,7 @@ function signInWithGoogle() {
 }
 
 function signOut() {
-  // Flush unsaved work before revoking the token (3s timeout).
-  // Queue persists in localStorage either way, but we may as well try.
-  var done = function() {
-    if (_googleAccessToken) {
-      google.accounts.oauth2.revoke(_googleAccessToken, function() {});
-    }
-    _googleAccessToken = null;
-    _momentumSessionToken = null;
-    localStorage.removeItem('momentum_access_token');
-    localStorage.removeItem('momentum_token_expiry');
-    localStorage.removeItem('momentum_session_token');
-    localStorage.removeItem('momentum_user_email');
-    showSignIn();
-  };
-  if (queueIsEmpty()) { done(); }
-  else {
-    flushNow(5000).then(function(saved) {
-      if (saved) { done(); return; }
-      showStatusBanner('Could not switch users because there are unsaved changes. Check your connection and retry.', 'error', 'Retry sync', function() { flushBatch(true); });
-    });
-  }
+  return switchUser();
 }
 
 function showSignIn() {
@@ -593,6 +592,7 @@ function gsr(fnName, arg) {
 // persists across logins in localStorage anyway, but every second of delay
 // matters because the user might close the tab.
 function handleAuthFailure() {
+  syncAccountReady = false;
   var errEl = document.getElementById('signinError');
   if (errEl && queueSize() > 0) {
     errEl.textContent = queueSize() + ' unsaved change' + (queueSize() === 1 ? '' : 's') +
@@ -1782,6 +1782,7 @@ function showShare(id) {
     <p>Sharing gives access to all children too. Comma-separated emails.</p>
     <label>Share with</label>
     <textarea id="mEmails">${esc(n.sharedWith || '')}</textarea>`, bg => {
+    pushUndo();
     n.sharedWith = bg.querySelector('#mEmails').value.trim(); scheduleSave(n); render();
   });
 }
@@ -1791,6 +1792,7 @@ function showAssign(id) {
   modal(`<h3>Assign "${esc(n.name)}"</h3>
     <label>Assign to (email)</label>
     <input id="mEmail" value="${esc(n.assignedTo || '')}" placeholder="teammate@example.com" />`, bg => {
+    pushUndo();
     var email = bg.querySelector('#mEmail').value.trim();
     n.assignedTo = email; n.assignedBy = email ? currentUser : '';
     if (email) n.sharedWith = [...new Set((n.sharedWith || '').split(',').map(s => s.trim()).filter(Boolean).concat(email))].join(',');
@@ -3596,100 +3598,36 @@ function pushUndo() {
   redoStack = [];
 }
 
+function restoreHistoryState(target) {
+  bumpGeneration();
+  queueState = MomentumCore.queueForRestore(queueState, nodes, target.nodes);
+  nodes = target.nodes;
+  collapsed = target.collapsed;
+  Object.keys(queueState.saves).concat(Object.keys(queueState.deletes)).forEach(touchNode);
+  persistQueue();
+  if (target.tab && target.tab !== activeTab) {
+    activeTab = target.tab;
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === activeTab); });
+    document.querySelectorAll('.mobile-nav-btn').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === activeTab); });
+  }
+  if (target.zoomedId !== undefined) { zoomedId = target.zoomedId; updateZoomCrumb(); }
+  saveCollapsed();
+  if (!queueIsEmpty()) armFlush();
+  render();
+}
+
 function undo() {
   if (!undoStack.length) return;
-  bumpGeneration();
-  // Clear any pending saves/deletes — they reflected pre-undo state and are now invalid
-  queueState.saves = {};
-  queueState.deletes = {};
-  persistQueue();
-  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-  // Save current state to redo stack before restoring
-  redoStack.push({
-    nodes: JSON.parse(JSON.stringify(nodes)),
-    collapsed: JSON.parse(JSON.stringify(collapsed))
-  });
+  redoStack.push(MomentumCore.snapshotState(nodes, collapsed, activeTab, zoomedId));
   if (redoStack.length > MAX_UNDO) redoStack.shift();
-  var prev = undoStack.pop();
-
-  var undoDiff = MomentumCore.diffForRestore(nodes, prev.nodes);
-  var toSave = undoDiff.saves;
-  var toDelete = undoDiff.deletes;
-
-  nodes = prev.nodes;
-  collapsed = prev.collapsed;
-  if (prev.tab && prev.tab !== activeTab) {
-    activeTab = prev.tab;
-    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === activeTab); });
-    document.querySelectorAll('.mobile-nav-btn').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === activeTab); });
-  }
-  if (prev.zoomedId !== undefined) { zoomedId = prev.zoomedId; updateZoomCrumb(); }
-  saveCollapsed();
-
-  // Queue the restored nodes for save (they are the truth now)
-  toSave.forEach(function(n) {
-    // Mark as touched so reconcile won't overwrite them before the batch goes out
-    touchNode(n.id);
-    queueState.saves[n.id] = Object.assign({}, n);
-  });
-  if (toDelete.length) {
-    toDelete.forEach(function(n) {
-      touchNode(n.id);
-      queueState.deletes[n.id] = true;
-      delete queueState.saves[n.id];
-    });
-  }
-  persistQueue();
-  if (toSave.length || toDelete.length) armFlush();
-
-  render();
+  restoreHistoryState(undoStack.pop());
 }
 
 function redo() {
   if (!redoStack.length) return;
-  bumpGeneration();
-  queueState.saves = {};
-  queueState.deletes = {};
-  persistQueue();
-  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-  undoStack.push({
-    nodes: JSON.parse(JSON.stringify(nodes)),
-    collapsed: JSON.parse(JSON.stringify(collapsed))
-  });
-  var next = redoStack.pop();
-
-  var nextMap = {};
-  next.nodes.forEach(function(n) { nextMap[n.id] = n; });
-  var currMap = {};
-  nodes.forEach(function(n) { currMap[n.id] = n; });
-
-  var toSave = next.nodes.filter(function(n) {
-    if (!n.name || !n.name.trim()) return false;
-    var curr = currMap[n.id];
-    if (!curr) return true;
-    return curr.name !== n.name || curr.parentId !== n.parentId ||
-           curr.isSection !== n.isSection || curr.done !== n.done ||
-           curr.watching !== n.watching ||
-           curr.date !== n.date || curr.order !== n.order;
-  });
-  var toDelete = nodes.filter(function(n) { return !nextMap[n.id]; });
-
-  nodes = next.nodes;
-  collapsed = next.collapsed;
-  saveCollapsed();
-
-  toSave.forEach(function(n) {
-    touchNode(n.id);
-    queueState.saves[n.id] = Object.assign({}, n);
-  });
-  toDelete.forEach(function(n) {
-    touchNode(n.id);
-    queueState.deletes[n.id] = true;
-    delete queueState.saves[n.id];
-  });
-  persistQueue();
-  if (toSave.length || toDelete.length) armFlush();
-  render();
+  undoStack.push(MomentumCore.snapshotState(nodes, collapsed, activeTab, zoomedId));
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  restoreHistoryState(redoStack.pop());
 }
 
 // ── Mobile helpers ─────────────────────────────────────────────────────────
@@ -4520,6 +4458,7 @@ function showMobileActionSheet(nodeId) {
 }
 
 function switchUser() {
+  saveActiveInput();
   var done = function() {
     localStorage.removeItem('momentum_user_email');
     localStorage.removeItem('momentum_access_token');
@@ -4527,12 +4466,20 @@ function switchUser() {
     localStorage.removeItem('momentum_session_token');
     // Also clear the persistent queue — this user's queue should not carry over
     // to a different user account
-    localStorage.removeItem(QUEUE_KEY);
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    if (QUEUE_KEY) localStorage.removeItem(QUEUE_KEY);
+    QUEUE_KEY = null;
+    queueOwner = null;
+    syncAccountReady = false;
     queueState.saves = {};
     queueState.deletes = {};
     nodeTouched = {};
     currentUser = '';
     nodes = [];
+    teamMembers = [];
+    selectedIds.clear();
+    lastPickedSection = null;
+    lastPickedAssignee = null;
     if (typeof google !== 'undefined' && google.accounts && _googleAccessToken) {
       google.accounts.oauth2.revoke(_googleAccessToken, function() {});
     }
@@ -4541,8 +4488,12 @@ function switchUser() {
     showSignIn();
   };
   // Flush before switching so the current user's work makes it to the sheet
-  if (queueIsEmpty()) { done(); }
-  else { flushNow(3000).then(done); }
+  if (queueIsEmpty() && !batchInFlight) { done(); return Promise.resolve(true); }
+  return flushNow(3000).then(function(saved) {
+    if (saved) { done(); return true; }
+    showStatusBanner('Could not switch accounts because changes are still saving. Your work is retained. Retry when connected.', 'error', 'Retry sync', function() { flushBatch(true); });
+    return false;
+  });
 }
 
 // Boot sequence:
@@ -4553,11 +4504,12 @@ function switchUser() {
 // No polling interval — we rely on visibilitychange for passive refresh.
 function bootApp() {
   mlog('bootApp: invoked. token valid?', isTokenValid());
-  loadQueue();
-  mlog('bootApp: queue loaded. size=', queueSize());
+  // Restore only after whoAmI identifies the account that owns the queue.
   gsr('whoAmI').then(function(r) {
     mlog('bootApp: whoAmI result=', r);
     if (r && r.email) {
+      loadQueue(r.email);
+      syncAccountReady = true;
       currentUser = r.email;
       localStorage.setItem('momentum_user_email', r.email);
       if (r.sessionToken) {
@@ -4631,6 +4583,8 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('DOMContentLoaded', function() {
   checkMobile();
   updateLastSyncLabel();
+  refreshToday();
+  setInterval(function() { if (!document.hidden) refreshToday(); }, 30000);
   setTimeout(function() { checkMobile(); updateLastSyncLabel(); }, 300);
   setTimeout(function() { checkMobile(); updateLastSyncLabel(); }, 1000);
   var initialHideDoneBtn = document.getElementById('hideDoneBtn');
@@ -4689,6 +4643,8 @@ document.addEventListener('DOMContentLoaded', function() {
   var lastVisibleFetch = Date.now(); // boot fetch counts as the first
   function onWindowActivated(source) {
     if (document.hidden) return;
+    refreshToday();
+    if (!queueOwner) return;
     // If we have queued work, flush it rather than fetching
     if (!queueIsEmpty()) { flushBatch(); return; }
     // Tiny cooldown to coalesce simultaneous focus + visibilitychange
