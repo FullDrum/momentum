@@ -642,6 +642,16 @@ function ancestors(id) {
   return a;
 }
 function breadcrumb(id) { return ancestors(id).map(n => n.name || '…').join(' › '); }
+function dateKey(n) { return n.date ? String(n.date).slice(0, 10) : 'undated'; }
+// Set a task (and its whole subtree) to today so the group moves together. Call
+// pushUndo() before invoking; the caller renders.
+function setTaskToday(n) {
+  var t = localDateTime();
+  [n.id].concat(descendants(n.id)).forEach(function(id) {
+    var x = nodes.find(function(xx) { return xx.id === id; });
+    if (x) { x.date = t; scheduleSave(x); }
+  });
+}
 function flattenVisible(pid, depth) {
   return children(pid).flatMap(n => {
     // In tree view, hide done nodes if hideDone (except done today, and except
@@ -701,6 +711,9 @@ function visibleList() {
       // Keep watched and active tasks in separate top-level lists in both
       // All Tasks and Today.
       if ((activeTab === 'all' || activeTab === 'today') && c.watching !== n.watching) return false;
+      // In Today/All Tasks, only nest a child under its parent when they share
+      // a date group; a different-date child is a top-level entry in its own group.
+      if ((activeTab === 'all' || activeTab === 'today') && dateKey(c) !== dateKey(n)) return false;
       return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
     }).forEach(function(c) {
       result = result.concat(expandNode(c, depth + 1));
@@ -711,12 +724,14 @@ function visibleList() {
   var expanded = [];
   tasks.forEach(function(n) {
     if (seen.has(n.id)) return; // already rendered as a child
-    // If this node's parent is also in the task set it will be rendered
-    // under its parent when that parent is processed — skip it here
+    // A node renders under its parent only when the parent is also a task in
+    // this view AND (for Today/All Tasks) they share a date group.
     var parentTask = n.parentId ? nodes.find(function(x) { return x.id === n.parentId; }) : null;
     var separateWatchList = (activeTab === 'all' || activeTab === 'today') &&
       parentTask && n.watching !== parentTask.watching;
-    if (n.parentId && taskSet.has(n.parentId) && !separateWatchList) return;
+    var nestsUnderParent = n.parentId && taskSet.has(n.parentId) && !separateWatchList &&
+      (activeTab === 'assigned' || dateKey(n) === dateKey(parentTask));
+    if (nestsUnderParent) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
   return expanded;
@@ -1162,7 +1177,7 @@ function attachEvents() {
   });
   el.querySelectorAll('[data-promote]').forEach(b => b.onclick = e => {
     e.stopPropagation(); var n = nodes.find(x => x.id === b.dataset.promote);
-    if (n) { pushUndo(); n.date = localDateTime(); scheduleSave(n); render(); }
+    if (n) { pushUndo(); setTaskToday(n); render(); }
   });
   el.querySelectorAll('[data-settoday]').forEach(function(badge) {
     badge.onclick = function(e) {
@@ -1171,16 +1186,17 @@ function attachEvents() {
       if (!n || n.isSection) return;
       pushUndo();
       if (n.date && n.date.slice(0,10) === TODAY) {
-        // Demote: set to yesterday so it leaves the Today tab but keeps a date
+        // Demote: set to yesterday so it leaves the Today tab but keeps a date.
+        // (Single node only — demote does not cascade.)
         var yest = new Date();
         yest.setDate(yest.getDate() - 1);
         n.date = yest.getFullYear() + '-' +
           String(yest.getMonth()+1).padStart(2,'0') + '-' +
           String(yest.getDate()).padStart(2,'0') + ' 00:00:00';
+        scheduleSave(n);
       } else {
-        n.date = localDateTime();
+        setTaskToday(n);
       }
-      scheduleSave(n);
       render();
     };
     badge.style.cursor = 'pointer';
@@ -1587,16 +1603,16 @@ function handleKey(e, inp) {
       pushUndo();
       cur.name = inp.value.trim() || cur.name;
       if (cur.date && cur.date.slice(0, 10) === TODAY) {
-        // Already today — demote to yesterday
+        // Already today — demote to yesterday (single node)
         var yest = new Date();
         yest.setDate(yest.getDate() - 1);
         cur.date = yest.getFullYear() + '-' +
           String(yest.getMonth()+1).padStart(2,'0') + '-' +
           String(yest.getDate()).padStart(2,'0') + ' 00:00:00';
+        scheduleSave(cur);
       } else {
-        cur.date = localDateTime();
+        setTaskToday(cur);
       }
-      scheduleSave(cur);
       render();
     }
     return;
@@ -2692,7 +2708,7 @@ function attachSearchEvents() {
     b.onclick = function(e) {
       e.stopPropagation();
       var n = nodes.find(function(x) { return x.id === b.dataset.promote; });
-      if (n) { pushUndo(); n.date = localDateTime(); scheduleSave(n); renderSearchResults(); }
+      if (n) { pushUndo(); setTaskToday(n); renderSearchResults(); }
     };
   });
   el.querySelectorAll('[data-del]').forEach(function(b) {
@@ -4071,7 +4087,7 @@ function initKbBar() {
     var inp = activeInput();
     if (!inp) return;
     var n = nodes.find(function(x){ return x.id === inp.dataset.id; });
-    if (n && !n.isSection) { pushUndo(); n.date = localDateTime(); scheduleSave(n); render(); }
+    if (n && !n.isSection) { pushUndo(); setTaskToday(n); render(); }
   };
   if ((btn = get('kbDone'))) btn.onmousedown = function(e) {
     e.preventDefault();
@@ -4427,10 +4443,10 @@ document.addEventListener('keydown', function(e) {
         focusedNode.date = yest2.getFullYear() + '-' +
           String(yest2.getMonth()+1).padStart(2,'0') + '-' +
           String(yest2.getDate()).padStart(2,'0') + ' 00:00:00';
+        scheduleSave(focusedNode);
       } else {
-        focusedNode.date = localDateTime();
+        setTaskToday(focusedNode);
       }
-      scheduleSave(focusedNode);
       render();
     }
     return;
@@ -4585,7 +4601,7 @@ function showMobileActionSheet(nodeId) {
         pushUndo();
         snapshotIds.forEach(function(tid) {
           var tn = nodes.find(function(x){ return x.id === tid; });
-          if (tn && !tn.isSection) { tn.date = localDateTime(); scheduleSave(tn); }
+          if (tn && !tn.isSection) { setTaskToday(tn); }
         });
         render();
       } else if (action === 'move') {
