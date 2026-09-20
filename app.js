@@ -990,11 +990,10 @@ function rowHTML(n, depth, flat = false) {
 
   var meta = '';
   if (flat) {
-    // Only show breadcrumb for root-level flat nodes — children have their parent visible above them
-    if (depth === 0) {
-      var bc = breadcrumb(n.id);
-      if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
-    }
+    // Show the ancestor path (e.g. "Project › Section") so a task's location is
+    // visible even though sections aren't rendered in Today/All Tasks.
+    var bc = breadcrumb(n.id);
+    if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
     var nd = n.date ? n.date.slice(0,10) : null;
     var isToday = nd === TODAY;
     if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
@@ -3679,7 +3678,6 @@ function startDrag(e, id) {
 
 function performDrop(srcIds, tgtId, mode) {
   if (!Array.isArray(srcIds)) srcIds = [srcIds];
-  pushUndo();
 
   var descOfSelected = new Set();
   srcIds.forEach(function(id) {
@@ -3688,6 +3686,7 @@ function performDrop(srcIds, tgtId, mode) {
     });
   });
 
+  // Cycle prevention: never drop a node into itself or one of its descendants.
   srcIds = srcIds.filter(function(id) {
     if (id === tgtId) return false;
     if (descendants(id).indexOf(tgtId) > -1) return false;
@@ -3696,8 +3695,27 @@ function performDrop(srcIds, tgtId, mode) {
   });
   if (!srcIds.length) return;
 
+  // Permission guard: only move nodes the current user can edit.
+  srcIds = srcIds.filter(function(id) {
+    var n = nodes.find(function(x) { return x.id === id; });
+    return n && canEdit(n);
+  });
+  if (!srcIds.length) return;
+
   var tgt = nodes.find(function(n) { return n.id === tgtId; });
   if (!tgt) return;
+
+  // Resolve the effective drop mode before mutating anything, so a rejected drop
+  // leaves the data untouched.
+  var isAssigned = (activeTab === 'assigned');
+  if (mode === 'child' && isAssigned) mode = 'below';
+  if (mode === 'child' && (activeTab === 'today' || activeTab === 'all')) {
+    var firstSrc = nodes.find(function(x) { return x.id === srcIds[0]; });
+    if (firstSrc && dateKey(firstSrc) !== dateKey(tgt)) mode = 'below'; // cross-date nesting belongs in Projects
+  }
+  if (mode === 'child' && !canEdit(tgt)) return; // cannot nest under a read-only node
+
+  pushUndo();
 
   var allMoveIds = new Set();
   srcIds.forEach(function(id) {
@@ -3708,13 +3726,6 @@ function performDrop(srcIds, tgtId, mode) {
   nodes = nodes.filter(function(n) { return !allMoveIds.has(n.id); });
 
   var tgtIdx = nodes.findIndex(function(n) { return n.id === tgtId; });
-  var newParentId, insertAt;
-
-  var isFlat = (activeTab === 'today' || activeTab === 'all' || activeTab === 'assigned');
-
-  // In flat views, never allow nesting — treat child drop as below
-  if (mode === 'child' && isFlat) mode = 'below';
-
   var newParentId, insertAt;
 
   if (mode === 'child') {
@@ -3732,10 +3743,8 @@ function performDrop(srcIds, tgtId, mode) {
 
   srcIds.forEach(function(id) {
     var n = moveNodes.find(function(x) { return x.id === id; });
-    if (n) {
-      // In flat views preserve each node's own parentId — only reorder, don't reparent
-      if (!isFlat) n.parentId = newParentId;
-    }
+    // Assigned-to-me is reorder-only; Today/All Tasks and Projects reparent.
+    if (n && !isAssigned) n.parentId = newParentId;
   });
 
   nodes.splice.apply(nodes, [insertAt, 0].concat(moveNodes));

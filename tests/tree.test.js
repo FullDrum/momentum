@@ -107,3 +107,39 @@ test('structure: service worker auto-activates on install', () => {
   const src = fs.readFileSync(path.join(__dirname, '../sw.js'), 'utf8');
   assert.match(src, /self\.skipWaiting\(\)/);
 });
+
+test('drag: same-date child drop nests in All Tasks', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.collapsed = {};
+  c.nodes = [
+    node('a', 'A', null, '2026-09-19 10:00:00'),
+    node('b', 'B', null, '2026-09-19 12:00:00')
+  ];
+  c.performDrop(['b'], 'a', 'child');
+  assert.equal(c.nodes.find(n => n.id === 'b').parentId, 'a');
+});
+
+test('drag: cross-date child drop does not nest in All Tasks', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.collapsed = {};
+  c.nodes = [
+    node('a', 'A', null, '2026-09-19 10:00:00'),
+    node('b', 'B', null, '2026-09-20 10:00:00')
+  ];
+  c.performDrop(['b'], 'a', 'child');
+  assert.equal(c.nodes.find(n => n.id === 'b').parentId, null, 'cross-date drop stays reorder-only');
+});
+
+test('drag: cycle prevention stops a parent being dropped into its own child', () => {
+  const c = app();
+  c.activeTab = 'tree';
+  c.collapsed = {};
+  c.nodes = [
+    node('a', 'A', null, '2026-09-19 10:00:00'),
+    node('b', 'B', 'a', '2026-09-19 12:00:00')
+  ];
+  c.performDrop(['a'], 'b', 'child');
+  assert.equal(c.nodes.find(n => n.id === 'a').parentId, null, 'parent must not move into its own child');
+});
