@@ -847,19 +847,7 @@ function render(preserveScroll) {
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 function renderMarkdown(text) {
-  if (!text) return '';
-  // Escape HTML first, then apply formatting markers
-  var s = text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // Bold: **text**
-  s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-  // Italic: _text_ (single underscore)
-  s = s.replace(/(?<![_\w])_([^_]+)_(?![_\w])/g, '<i>$1</i>');
-  // Underline: __text__ (double underscore) - must come after italic
-  s = s.replace(/__(.+?)__/g, '<u>$1</u>');
-  // Strikethrough: ~~text~~
-  s = s.replace(/~~(.+?)~~/g, '<s>$1</s>');
-  return s;
+  return MomentumCore.renderMarkdown(text);
 }
 
 function applyFormat(inp, marker) {
@@ -895,6 +883,50 @@ function applyFormat(inp, marker) {
   }
   // Trigger input event to resize and schedule save
   inp.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function applyLink(inp) {
+  var start = inp.selectionStart, end = inp.selectionEnd;
+  var sel = inp.value.slice(start, end);
+  if (!sel) { alert('Select the text to link first.'); return; }
+  var url = prompt('Link URL (https://…):', 'https://');
+  if (url == null) return; // cancelled
+  var u = String(url).trim();
+  if (!u) return;
+  if (!MomentumCore.sanitizeUrl(u)) { alert('Only http, https and mailto links are allowed.'); return; }
+  var replacement = '[' + sel + '](' + u + ')';
+  inp.value = inp.value.slice(0, start) + replacement + inp.value.slice(end);
+  inp.setSelectionRange(start + replacement.length, start + replacement.length);
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function removeLinkMenu() {
+  var m = document.getElementById('linkMenu');
+  if (m) {
+    if (m._cleanup) m._cleanup();
+    m.remove();
+  }
+}
+
+function showLinkMenu(inp, x, y) {
+  removeLinkMenu();
+  var menu = document.createElement('div');
+  menu.id = 'linkMenu';
+  menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;z-index:2000;background:var(--bg);border:0.5px solid var(--border2);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.25);padding:4px 0;min-width:140px;';
+  menu.innerHTML = '<div class="link-menu-item" style="padding:7px 16px;cursor:pointer;font-size:12px;color:var(--text);">🔗 Make link</div>';
+  document.body.appendChild(menu);
+  menu.querySelector('.link-menu-item').onclick = function(e) {
+    e.stopPropagation();
+    removeLinkMenu();
+    applyLink(inp);
+  };
+  var close = function(e) { if (!menu.contains(e.target)) removeLinkMenu(); };
+  var escClose = function(e) { if (e.key === 'Escape') removeLinkMenu(); };
+  setTimeout(function() { document.addEventListener('mousedown', close); document.addEventListener('keydown', escClose); }, 0);
+  menu._cleanup = function() {
+    document.removeEventListener('mousedown', close);
+    document.removeEventListener('keydown', escClose);
+  };
 }
 
 function switchToEdit(inp, displayEl) {
@@ -1185,6 +1217,15 @@ function attachEvents() {
     disp.onclick = function(e) {
       // In mobile selection mode, taps select nodes not edit them
       if (isMobile && selectionMode) { e.stopPropagation(); return; }
+      // Clicking a rendered link opens it instead of entering edit mode
+      var link = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (link) {
+        e.preventDefault();
+        e.stopPropagation();
+        var href = link.getAttribute('href');
+        if (href && MomentumCore.sanitizeUrl(href)) window.open(href, '_blank', 'noopener,noreferrer');
+        return;
+      }
       if (!canEdit(nodes.find(function(x){return x.id===id;})||{})) return;
       var inp = document.getElementById('inp_' + id);
       switchToEdit(inp, disp);
@@ -1253,6 +1294,7 @@ function attachEvents() {
         if (e.key === 'b' || e.key === 'B') { e.preventDefault(); applyFormat(inp, '**'); return; }
         if (e.key === 'i' || e.key === 'I') { e.preventDefault(); applyFormat(inp, '_'); return; }
         if (e.key === 'u' || e.key === 'U') { e.preventDefault(); applyFormat(inp, '__'); return; }
+        if (e.key === 'k' || e.key === 'K') { e.preventDefault(); applyLink(inp); return; }
       }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
         if (e.key === 'x' || e.key === 'X') {
@@ -1261,6 +1303,12 @@ function attachEvents() {
       }
       handleKey(e, inp);
     };
+    inp.addEventListener('contextmenu', function(e) {
+      // Right-click with a selection → offer "Make link"
+      if (inp.selectionStart === inp.selectionEnd) return;
+      e.preventDefault();
+      showLinkMenu(inp, e.clientX, e.clientY);
+    });
   });
 }
 

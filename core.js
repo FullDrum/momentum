@@ -188,9 +188,51 @@
     return list.join(',');
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Whitelist link schemes. Anything else (javascript:, data:, vbscript:, file:,
+  // ftp:, …) is rejected so it can never be rendered as a clickable link.
+  function sanitizeUrl(raw) {
+    if (!raw) return null;
+    var u = String(raw).trim();
+    if (!/^(https?|mailto):/i.test(u)) return null;
+    if (/[\s\u0000-\u001f"'<>]/.test(u)) return null;
+    return u;
+  }
+
+  // Markdown links are hoisted into placeholders BEFORE formatting so the
+  // bold/italic/underline/strike markers can never touch a link's URL. Labels and
+  // hrefs are HTML-escaped, and the scheme is whitelisted via sanitizeUrl.
+  var LINK_GLOBAL = /\[([^\]\n]+)\]\(((?:https?|mailto):[^)\s]*)\)/gi;
+
+  function renderMarkdown(text) {
+    if (!text) return '';
+    var links = [];
+    var s = String(text).replace(LINK_GLOBAL, function(match, label, url) {
+      links.push({ label: label, url: url });
+      return '\u0000' + (links.length - 1) + '\u0000';
+    });
+    s = escapeHtml(s);
+    s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    s = s.replace(/(?<![_\w])_([^_]+)_(?![_\w])/g, '<i>$1</i>');
+    s = s.replace(/__(.+?)__/g, '<u>$1</u>');
+    s = s.replace(/~~(.+?)~~/g, '<s>$1</s>');
+    s = s.replace(/\u0000(\d+)\u0000/g, function(_, i) {
+      var l = links[Number(i)];
+      var safe = sanitizeUrl(l.url);
+      if (!safe) return escapeHtml('[' + l.label + '](' + l.url + ')');
+      return '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(l.label) + '</a>';
+    });
+    return s;
+  }
+
   return { emptyQueue: emptyQueue, restoreQueue: restoreQueue, enqueueSave: enqueueSave,
     queueForRestore: queueForRestore, overlayQueue: overlayQueue, acknowledgeBatch: acknowledgeBatch, localDay: localDay,
     enqueueDelete: enqueueDelete, tokenIsValid: tokenIsValid, snapshotState: snapshotState,
     diffForRestore: diffForRestore, validateBackup: validateBackup,
-    favouriteCount: favouriteCount, assigneeScore: assigneeScore, mergeSharedWith: mergeSharedWith };
+    favouriteCount: favouriteCount, assigneeScore: assigneeScore, mergeSharedWith: mergeSharedWith,
+    escapeHtml: escapeHtml, sanitizeUrl: sanitizeUrl, renderMarkdown: renderMarkdown };
 });

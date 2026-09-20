@@ -78,3 +78,39 @@ test('mergeSharedWith deduplicates and preserves existing entries', () => {
   assert.equal(core.mergeSharedWith('x@y.z, a@b.c', 'a@b.c'), 'x@y.z,a@b.c');
   assert.equal(core.mergeSharedWith(' x@y.z , a@b.c ', 'new@q.r'), 'x@y.z,a@b.c,new@q.r');
 });
+
+test('sanitizeUrl whitelists http, https and mailto and rejects everything else', () => {
+  assert.equal(core.sanitizeUrl('https://example.com'), 'https://example.com');
+  assert.equal(core.sanitizeUrl('http://example.com'), 'http://example.com');
+  assert.equal(core.sanitizeUrl('mailto:someone@example.com'), 'mailto:someone@example.com');
+  assert.equal(core.sanitizeUrl('javascript:alert(1)'), null);
+  assert.equal(core.sanitizeUrl('JaVaScRiPt:alert(1)'), null);
+  assert.equal(core.sanitizeUrl('data:text/html,<script>'), null);
+  assert.equal(core.sanitizeUrl('vbscript:x'), null);
+  assert.equal(core.sanitizeUrl('file:///etc/passwd'), null);
+  assert.equal(core.sanitizeUrl('ftp://x.com'), null);
+  assert.equal(core.sanitizeUrl('https://x.com/a b'), null);
+  assert.equal(core.sanitizeUrl('https://x.com/on"load'), null);
+  assert.equal(core.sanitizeUrl('  https://example.com  '), 'https://example.com');
+  assert.equal(core.sanitizeUrl(''), null);
+  assert.equal(core.sanitizeUrl(null), null);
+});
+
+test('renderMarkdown renders safe links, escapes labels, and keeps formatting', () => {
+  const a = '<a href="https://a.com" target="_blank" rel="noopener noreferrer">x</a>';
+  assert.equal(core.renderMarkdown('[x](https://a.com)'), a);
+  // Unsafe scheme is left as literal (escaped) text, not a link.
+  assert.equal(core.renderMarkdown('[x](javascript:alert(1))'), '[x](javascript:alert(1))');
+  // Label is escaped.
+  assert.equal(
+    core.renderMarkdown('[<b>&</b>](https://a.com)'),
+    '<a href="https://a.com" target="_blank" rel="noopener noreferrer">&lt;b&gt;&amp;&lt;/b&gt;</a>'
+  );
+  // Existing formatting still works.
+  assert.equal(core.renderMarkdown('**bold** and _it_ and __u__ and ~~s~~'),
+    '<b>bold</b> and <i>it</i> and <u>u</u> and <s>s</s>');
+  // A link nested inside bold still renders as a link inside bold.
+  assert.equal(core.renderMarkdown('**[x](https://a.com)**'), '<b>' + a + '</b>');
+  // A quote inside a URL is not rendered as a link (sanitised away to text).
+  assert.equal(core.renderMarkdown('[x](https://a.com/")'), '[x](https://a.com/&quot;)');
+});
