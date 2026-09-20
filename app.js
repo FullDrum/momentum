@@ -1291,6 +1291,21 @@ function handleKey(e, inp) {
     return;
   }
 
+  // Ctrl+Shift+Enter: save text and choose assignee only, leaving the project unchanged
+  if (e.key === 'Enter' && e.shiftKey && !e.repeat && (e.ctrlKey || e.metaKey) && !e.altKey) {
+    e.preventDefault();
+    cur.name = inp.value;
+    if (cur.name.trim()) {
+      scheduleSave(cur);
+    }
+    openPeopleChooser({
+      title: 'Assign "' + cur.name + '"',
+      selected: cur.assignedTo || null,
+      onConfirm: function(email) { applyAssignment(cur, email); }
+    });
+    return;
+  }
+
   // Alt+Enter: move current node to General section
   if (e.key === 'Enter' && !e.shiftKey && e.altKey) {
     e.preventDefault();
@@ -1331,7 +1346,7 @@ function handleKey(e, inp) {
       // Root flat node — new task with today's date under the picked section
       nn = {
         id: newId(), name: '',
-        parentId: lastPickedSection || cur.parentId || null,
+        parentId: defaultParentForNewTask(cur.parentId),
         isSection: false, done: false,
         date: localDateTime(),
         owner: currentUser,
@@ -1562,7 +1577,7 @@ function addRoot() {
 function addTodayTask() {
   pushUndo();
   var n = {
-    id: newId(), name: '', parentId: lastPickedSection || null,
+    id: newId(), name: '', parentId: defaultParentForNewTask(null),
     isSection: false, done: false,
     date: localDateTime(), owner: currentUser,
     order: Date.now()
@@ -1788,15 +1803,11 @@ function showShare(id) {
 }
 
 function showAssign(id) {
-  var n = nodes.find(x => x.id === id); if (!n) return;
-  modal(`<h3>Assign "${esc(n.name)}"</h3>
-    <label>Assign to (email)</label>
-    <input id="mEmail" value="${esc(n.assignedTo || '')}" placeholder="teammate@example.com" />`, bg => {
-    pushUndo();
-    var email = bg.querySelector('#mEmail').value.trim();
-    n.assignedTo = email; n.assignedBy = email ? currentUser : '';
-    if (email) n.sharedWith = [...new Set((n.sharedWith || '').split(',').map(s => s.trim()).filter(Boolean).concat(email))].join(',');
-    scheduleSave(n); render();
+  var n = nodes.find(function(x) { return x.id === id; }); if (!n) return;
+  openPeopleChooser({
+    title: 'Assign "' + n.name + '"',
+    selected: n.assignedTo || null,
+    onConfirm: function(email) { applyAssignment(n, email); }
   });
 }
 
@@ -1810,105 +1821,146 @@ function collapseAll() {
 function bulkAssign() {
   if (!selectedIds.size) return;
   var ids = [...selectedIds];
+  openPeopleChooser({
+    title: 'Assign ' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + ' to…',
+    onConfirm: function(email) {
+      pushUndo();
+      ids.forEach(function(id) {
+        var n = nodes.find(function(x) { return x.id === id; });
+        if (!n || !canEdit(n)) return;
+        applyAssignmentFields(n, email);
+        scheduleSave(n);
+      });
+      clearSelection();
+      render();
+    }
+  });
+}
 
-  // Build a mini assignee picker overlay
+// ── People chooser (single reusable searchable assignee picker) ───────────────
+var ADD_NEW_SENTINEL = '__add_new__';
+
+function openPeopleChooser(opts) {
+  opts = opts || {};
+  var selected = opts.selected || null; // email, or null = no assignee
+  var query = '';
+  var hi = selected; // highlighted email (''/null = no assignee), or ADD_NEW_SENTINEL
+
   var overlay = document.createElement('div');
+  overlay.className = 'people-chooser-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;';
-
-  var users = getSortedAssignees();
-  var ADD_NEW_SENTINEL = '__add_new__';
-  var emailList = [''].concat(users.map(function(u) { return u.email || u; })).concat([ADD_NEW_SENTINEL]);
-  var hiEmail = null;
-
-  function rowHtml(email, name, isHi, isCurrent) {
-    var bg = isHi ? 'background:var(--accent);color:var(--bg);' : '';
-    var dim = isHi ? 'color:rgba(255,255,255,0.6);' : 'color:var(--text3);';
-    return '<div class="basg-row" data-email="' + esc(email) + '" style="padding:6px 16px;cursor:pointer;font-size:13px;' + bg + '">' +
-      esc(name) + (isCurrent ? ' <span style="font-size:10px;opacity:0.5">(me)</span>' : '') +
-      ' <span style="font-size:10px;' + dim + '">' + esc(email) + '</span></div>';
-  }
-
-  function buildList() {
-    var html = '<div class="basg-row" data-email="" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--text3);' +
-      (hiEmail === null ? 'background:var(--accent);color:var(--bg);' : '') + '">· No assignee</div>';
-    users.forEach(function(u) {
-      var email = u.email || u;
-      var name = u.name || email.split('@')[0];
-      html += rowHtml(email, name, hiEmail === email, email.toLowerCase() === (currentUser||'').toLowerCase());
-    });
-    html += '<div class="basg-new" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--accent);' +
-      (hiEmail === ADD_NEW_SENTINEL ? 'background:var(--accent);color:var(--bg);' : '') +
-      'border-top:0.5px solid var(--border);margin-top:4px;">+ Add new member</div>';
-    return html;
-  }
-
   overlay.innerHTML =
-    '<div style="background:var(--bg);border-radius:12px;border:0.5px solid var(--border2);width:340px;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.15);">' +
-      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid var(--border);">Assign ' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + ' to…</div>' +
-      '<div id="basgList" style="overflow-y:auto;flex:1;padding:4px 0;"></div>' +
+    '<div style="background:var(--bg);border-radius:12px;border:0.5px solid var(--border2);width:360px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.15);">' +
+      '<div style="padding:14px 16px 10px;font-size:13px;font-weight:500;">' + esc(opts.title || 'Assign to…') + '</div>' +
+      '<div style="padding:0 12px 6px;"><input id="pcSearch" type="text" placeholder="Search people…" autocomplete="off" spellcheck="false" style="width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;"></div>' +
+      '<div id="pcList" style="overflow-y:auto;flex:1;padding:4px 0;min-height:80px;"></div>' +
       '<div style="padding:10px 16px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">' +
-        '<button id="basgCancel" style="padding:6px 14px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>' +
-        '<button id="basgOk" style="padding:6px 14px;font-size:12px;border:none;border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer;font-weight:500;">Assign</button>' +
+        '<button id="pcCancel" style="padding:6px 14px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>' +
+        '<button id="pcOk" style="padding:6px 14px;font-size:12px;border:none;border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer;font-weight:500;">Assign</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 
+  function filtered() {
+    var users = getSortedAssignees();
+    if (!query) return users;
+    var q = query.toLowerCase();
+    return users.filter(function(u) {
+      var email = (u.email || u).toLowerCase();
+      var name = (u.name || '').toLowerCase();
+      return email.indexOf(q) > -1 || name.indexOf(q) > -1;
+    });
+  }
+
+  function buildList() {
+    var users = filtered();
+    var html = '<div class="pc-row" data-email="" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--text3);' +
+      (hi === null ? 'background:var(--accent);color:var(--bg);' : '') + '">No assignee</div>';
+    users.forEach(function(u) {
+      var email = u.email || u;
+      var name = u.name || email.split('@')[0];
+      var isHi = (hi || '').toLowerCase() === email.toLowerCase();
+      var isMe = email.toLowerCase() === (currentUser || '').toLowerCase();
+      var star = MomentumCore.favouriteCount(assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
+      var bg = isHi ? 'background:var(--accent);color:var(--bg);' : '';
+      var dim = isHi ? 'color:rgba(255,255,255,0.6);' : 'color:var(--text3);';
+      html += '<div class="pc-row" data-email="' + esc(email) + '" style="padding:6px 16px;cursor:pointer;font-size:13px;' + bg + '">' +
+        '<span style="font-size:9px;color:' + (isHi ? 'var(--bg)' : 'var(--accent)') + ';">' + star + '</span>' +
+        esc(name) + (isMe ? ' <span style="font-size:10px;opacity:0.5">(me)</span>' : '') +
+        ' <span style="font-size:10px;' + dim + '">' + esc(email) + '</span></div>';
+    });
+    html += '<div class="pc-new" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--accent);' +
+      (hi === ADD_NEW_SENTINEL ? 'background:var(--accent);color:var(--bg);' : '') +
+      'border-top:0.5px solid var(--border);margin-top:4px;">+ Add new person</div>';
+    return html;
+  }
+
   function renderList() {
-    var list = document.getElementById('basgList');
+    var list = document.getElementById('pcList');
     if (list) list.innerHTML = buildList();
-    // wire clicks
-    overlay.querySelectorAll('.basg-row').forEach(function(row) {
+    overlay.querySelectorAll('.pc-row').forEach(function(row) {
       row.onclick = function() {
-        hiEmail = row.dataset.email || null;
+        hi = row.dataset.email || null;
         renderList();
       };
     });
-    var newBtn = overlay.querySelector('.basg-new');
+    var newBtn = overlay.querySelector('.pc-new');
     if (newBtn) newBtn.onclick = function() {
       showAddMemberForm(overlay, function(email, name) {
         teamMembers.push({ email: email, name: name });
-        users = getSortedAssignees();
-        emailList = [''].concat(users.map(function(u){ return u.email||u; })).concat([ADD_NEW_SENTINEL]);
+        hi = email;
         renderList();
       });
     };
-    var hiEl = hiEmail === ADD_NEW_SENTINEL ? overlay.querySelector('.basg-new') :
-      (hiEmail ? overlay.querySelector('[data-email="'+hiEmail+'"]') : overlay.querySelector('[data-email=""]'));
+    var hiEl = hi === null ? overlay.querySelector('[data-email=""]') :
+      (hi === ADD_NEW_SENTINEL ? overlay.querySelector('.pc-new') : (hi ? overlay.querySelector('[data-email="' + hi + '"]') : null));
     if (hiEl) hiEl.scrollIntoView({ block: 'nearest' });
   }
-  renderList();
 
-  function applyBulkAssign(email) {
-    pushUndo();
-    ids.forEach(function(id) {
-      var n = nodes.find(function(x){ return x.id === id; });
-      if (!n || !canEdit(n)) return;
-      n.assignedTo = email || null;
-      n.assignedBy = email ? (currentUser || '') : null;
-      if (email) n.sharedWith = [...new Set((n.sharedWith||'').split(',').map(function(s){return s.trim();}).filter(Boolean).concat(email))].join(',');
-      scheduleSave(n);
-    });
+  renderList();
+  var search = overlay.querySelector('#pcSearch');
+  if (search) search.focus();
+
+  function confirm() {
+    cleanup();
+    if (hi) recordFavourite('assignee', hi.toLowerCase());
+    if (opts.onConfirm) opts.onConfirm(hi);
+  }
+  function cleanup() {
     overlay.remove();
-    document.removeEventListener('keydown', kh);
-    clearSelection();
-    render();
+    document.removeEventListener('keydown', onKey);
   }
 
-  overlay.querySelector('#basgCancel').onclick = function() { overlay.remove(); document.removeEventListener('keydown', kh); };
-  overlay.querySelector('#basgOk').onclick = function() { applyBulkAssign(hiEmail || null); };
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) { overlay.remove(); document.removeEventListener('keydown', kh); } });
-
-  var kh = function(e) {
-    var idx = emailList.indexOf(hiEmail || '');
-    if (e.key === 'ArrowDown') { e.preventDefault(); var n2 = idx+1; if(n2<emailList.length) hiEmail=emailList[n2]||null; renderList(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); var p2=idx-1; if(p2>=0) hiEmail=emailList[p2]||null; renderList(); }
-    else if (e.key === 'Enter') { e.preventDefault();
-      if (hiEmail === ADD_NEW_SENTINEL) { overlay.querySelector('.basg-new') && overlay.querySelector('.basg-new').click(); }
-      else applyBulkAssign(hiEmail || null);
+  var onKey = function(e) {
+    if (e.key === 'Escape') { e.preventDefault(); cleanup(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hi === ADD_NEW_SENTINEL) { var nb = overlay.querySelector('.pc-new'); if (nb) nb.click(); return; }
+      confirm();
+      return;
     }
-    else if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', kh); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      var items = ['']; // '' = no assignee
+      filtered().forEach(function(u) { items.push(u.email || u); });
+      items.push(ADD_NEW_SENTINEL);
+      var idx = items.indexOf(hi === null ? '' : hi);
+      var next = e.key === 'ArrowDown' ? Math.min(items.length - 1, idx + 1) : Math.max(0, idx - 1);
+      hi = items[next] === '' ? null : items[next];
+      renderList();
+    }
   };
-  setTimeout(function(){ document.addEventListener('keydown', kh); }, 100);
+
+  if (search) {
+    search.addEventListener('input', function(e) { query = e.target.value; renderList(); });
+    search.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape') onKey(e);
+    });
+  }
+  overlay.querySelector('#pcCancel').onclick = cleanup;
+  overlay.querySelector('#pcOk').onclick = confirm;
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+  setTimeout(function() { document.addEventListener('keydown', onKey); }, 100);
 }
 
 function bulkShare() {
@@ -2053,8 +2105,8 @@ var dragGhost = null;
 var opGeneration = 0; // incremented on undo to cancel in-flight ops
 var selectionMode = false; // true when mobile selection mode is active
 var zoomedId = null; // node currently zoomed into
-var lastPickedSection = null;
-var teamMembers = []; // cached from sheet: [{email, name}] // last used section ID from picker
+var lastPickedSection = undefined; // undefined=never picked, null=explicit "No project", else section id
+var teamMembers = []; // cached from sheet: [{email, name}]
 var lastPickedAssignee = null; // last used assignee email from picker
 var sectionFavourites = JSON.parse(localStorage.getItem('momentum_sec_favs') || '{}');
 var assigneeFavourites = JSON.parse(localStorage.getItem('momentum_asg_favs') || '{}');
@@ -2939,9 +2991,18 @@ function navBack() {
 }
 
 function recordFavourite(type, id) {
-  var favs = type === 'section' ? sectionFavourites : assigneeFavourites;
-  favs[id] = (favs[id] || 0) + 1;
-  localStorage.setItem(type === 'section' ? 'momentum_sec_favs' : 'momentum_asg_favs', JSON.stringify(favs));
+  var isAssignee = type === 'assignee';
+  var favs = isAssignee ? assigneeFavourites : sectionFavourites;
+  var count = MomentumCore.favouriteCount(favs[id]) + 1;
+  // Assignees keep recency + frequency; sections keep their legacy bare count.
+  favs[id] = isAssignee ? { n: count, t: Date.now() } : count;
+  localStorage.setItem(isAssignee ? 'momentum_asg_favs' : 'momentum_sec_favs', JSON.stringify(favs));
+}
+
+// Default parent for a brand-new task. undefined = never picked (use fallback);
+// null = explicit "No project"; otherwise the last picked section id.
+function defaultParentForNewTask(fallbackParent) {
+  return lastPickedSection === undefined ? (fallbackParent || null) : lastPickedSection;
 }
 
 function getSortedSections(parentId, depth) {
@@ -2975,10 +3036,11 @@ function getSortedAssignees() {
     if (n.assignedTo && n.assignedTo.trim()) { var k = n.assignedTo.trim().toLowerCase(); if (!userSet[k]) userSet[k] = { email: n.assignedTo.trim(), name: n.assignedTo.trim().split('@')[0] }; }
   });
   var users = Object.values(userSet);
+  var now = Date.now();
   users.sort(function(a, b) {
-    var fa = assigneeFavourites[a.email.toLowerCase()] || 0;
-    var fb = assigneeFavourites[b.email.toLowerCase()] || 0;
-    if (fa !== fb) return fb - fa;
+    var sa = MomentumCore.assigneeScore(assigneeFavourites[a.email.toLowerCase()], now);
+    var sb = MomentumCore.assigneeScore(assigneeFavourites[b.email.toLowerCase()], now);
+    if (sa !== sb) return sb - sa;
     return a.name.localeCompare(b.name);
   });
   return users;
@@ -2997,11 +3059,13 @@ function showCombinedPicker(sourceNode) {
     p = pn ? pn.parentId : null;
   }
 
-  var selectedSection = lastPickedSection || sourceNode.parentId || null;
+  var NO_SECTION = '__no_section__';
+  var selectedSection = lastPickedSection === undefined ? (sourceNode.parentId || null) : lastPickedSection;
   var selectedAssignee = lastPickedAssignee || sourceNode.assignedTo || null;
   var focusCol = 'section'; // 'section' or 'assignee'
-  var hiSection = selectedSection;
+  var hiSection = selectedSection === null ? NO_SECTION : selectedSection;
   var hiAssignee = selectedAssignee;
+  var asgQuery = '';
 
   var overlay = document.createElement('div');
   overlay.id = 'combinedPickerOverlay';
@@ -3017,6 +3081,7 @@ function showCombinedPicker(sourceNode) {
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;">' +
           '<div id="asgColHeader" style="padding:8px 12px;font-size:11px;font-weight:600;color:var(--text2);">ASSIGN TO</div>' +
+          '<div style="padding:0 10px 6px;"><input id="asgSearch" type="text" placeholder="Search people…" autocomplete="off" spellcheck="false" style="width:100%;padding:6px 9px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;"></div>' +
           '<div id="asgList" style="overflow-y:auto;flex:1;padding-bottom:8px;"></div>' +
         '</div>' +
       '</div>' +
@@ -3029,7 +3094,7 @@ function showCombinedPicker(sourceNode) {
   document.body.appendChild(overlay);
 
   function getVisibleSections() {
-    var result = [];
+    var result = [{ node: { id: NO_SECTION, name: 'No project' }, depth: 0, isNone: true }];
     function walk(parentId, depth) {
       var ch = nodes.filter(function(n) {
         return n.parentId === (parentId || null) && n.isSection && n.name && n.name.trim();
@@ -3058,42 +3123,54 @@ function showCombinedPicker(sourceNode) {
 
     list.innerHTML = visible.map(function(item) {
       var n = item.node;
-      var hasChildren = nodes.some(function(c) { return c.parentId === n.id && c.isSection; });
+      var isNone = item.isNone === true;
+      var hasChildren = !isNone && nodes.some(function(c) { return c.parentId === n.id && c.isSection; });
       var isExp = pickerExpanded[n.id];
       var isHi = n.id === hiSection && focusCol === 'section';
-      var isSel = n.id === selectedSection;
-      var arrow = hasChildren ? (isExp ? '▼ ' : '▶ ') : '· ';
-      var fav = sectionFavourites[n.id] > 0 ? '★ ' : '';
+      var isSel = isNone ? selectedSection === null : n.id === selectedSection;
+      var arrow = isNone ? '· ' : (hasChildren ? (isExp ? '▼ ' : '▶ ') : '· ');
+      var fav = isNone ? '' : (sectionFavourites[n.id] > 0 ? '★ ' : '');
       var bg = isHi ? 'var(--accent)' : isSel ? 'var(--bg3)' : '';
       var col = isHi ? 'var(--bg)' : '';
+      var label = isNone ? 'No project' : n.name;
       return '<div class="spick" data-id="' + n.id + '" style="padding:5px 12px 5px ' + (8 + item.depth * 16) + 'px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
         '<span style="font-size:8px;opacity:0.5;">' + arrow + '</span>' +
         '<span style="font-size:9px;color:' + (isHi ? 'var(--bg)' : 'var(--accent)') + ';">' + fav + '</span>' +
-        esc(n.name) + '</div>';
+        esc(label) + '</div>';
     }).join('');
 
     var hi = list.querySelector('[data-id="' + hiSection + '"]');
     if (hi) hi.scrollIntoView({ block: 'nearest' });
   }
 
-  function renderAssignees() {
+  function filteredAssignees() {
     var users = getSortedAssignees();
+    if (!asgQuery) return users;
+    var q = asgQuery.toLowerCase();
+    return users.filter(function(u) {
+      var email = (u.email || u).toLowerCase();
+      var name = (u.name || '').toLowerCase();
+      return email.indexOf(q) > -1 || name.indexOf(q) > -1;
+    });
+  }
+
+  function renderAssignees() {
+    var users = filteredAssignees();
     var list = document.getElementById('asgList');
     if (!list) return;
     var hdr = document.getElementById('asgColHeader');
     if (hdr) hdr.style.background = focusCol === 'assignee' ? 'var(--accent)' : '';
     if (hdr) hdr.style.color = focusCol === 'assignee' ? 'var(--bg)' : 'var(--text2)';
 
-    // Add "No assignee" option
     var noAssign = hiAssignee === null && focusCol === 'assignee';
-    list.innerHTML = '<div class="apick" data-email="" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + (noAssign ? 'var(--accent)' : '') + ';color:' + (noAssign ? 'var(--bg)' : 'var(--text3)') + ';">· None</div>' +
+    list.innerHTML = '<div class="apick" data-email="" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + (noAssign ? 'var(--accent)' : '') + ';color:' + (noAssign ? 'var(--bg)' : 'var(--text3)') + ';">No assignee</div>' +
       users.map(function(u) {
         var email = u.email || u;
-        var name = u.name || (typeof u === 'string' ? u.split('@')[0] : email.split('@')[0]);
+        var name = u.name || email.split('@')[0];
         var isHi = email.toLowerCase() === (hiAssignee || '').toLowerCase() && focusCol === 'assignee';
         var isSel = email.toLowerCase() === (selectedAssignee || '').toLowerCase();
         var isMe = email.toLowerCase() === (currentUser || '').toLowerCase();
-        var fav = (assigneeFavourites[email.toLowerCase()] || 0) > 0 ? '★ ' : '';
+        var fav = MomentumCore.favouriteCount(assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
         var bg = isHi ? 'var(--accent)' : isSel ? 'var(--bg3)' : '';
         var col = isHi ? 'var(--bg)' : '';
         return '<div class="apick" data-email="' + esc(email) + '" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
@@ -3118,8 +3195,8 @@ function showCombinedPicker(sourceNode) {
   function updateStatus() {
     var s = document.getElementById('pickerStatus');
     if (!s) return;
-    var secName = selectedSection ? (nodes.find(function(n){return n.id===selectedSection;})||{}).name || '' : '(none)';
-    var asgName = selectedAssignee ? selectedAssignee.split('@')[0] : '(none)';
+    var secName = selectedSection ? (nodes.find(function(n){return n.id===selectedSection;})||{}).name || '' : 'No project';
+    var asgName = selectedAssignee ? selectedAssignee.split('@')[0] : 'No assignee';
     s.textContent = 'Section: ' + secName + '  ·  Assign: ' + asgName;
   }
 
@@ -3143,10 +3220,13 @@ function showCombinedPicker(sourceNode) {
   }
 
   var escH = function(e) {
+    // While typing in the search field, Tab keeps its browser meaning; arrow
+    // keys and Enter still drive the (filtered) assignee list below.
+    if (document.activeElement && document.activeElement.id === 'asgSearch' && e.key === 'Tab') return;
     var visibleSecs = getVisibleSections();
     var secIds = visibleSecs.map(function(x) { return x.node.id; });
     // Assignee list: array of email strings ('' = none)
-    var asgEmailList = [''].concat(getSortedAssignees().map(function(u) { return u.email || u; }));
+    var asgEmailList = [''].concat(filteredAssignees().map(function(u) { return u.email || u; }));
 
     var ADD_NEW_SENTINEL = '__add_new__';
 
@@ -3176,21 +3256,21 @@ function showCombinedPicker(sourceNode) {
       else if (e.key === 'Enter') {
         // Enter on section: lock in this section and confirm immediately (keep current assignee)
         e.preventDefault();
-        selectedSection = hiSection;
+        selectedSection = (hiSection === NO_SECTION) ? null : hiSection;
         selectedAssignee = hiAssignee || null;
         confirm();
       }
       else if (e.key === 'Tab') {
         // Tab: move to assignee column
         e.preventDefault();
-        selectedSection = hiSection;
+        selectedSection = (hiSection === NO_SECTION) ? null : hiSection;
         focusCol = 'assignee';
         render();
       }
       else if (e.key === 'Escape') { cleanup(); }
     } else {
       // Assignee column — list includes '' (none), emails, and ADD_NEW_SENTINEL at end
-      var asgFullList = [''].concat(getSortedAssignees().map(function(u) { return u.email || u; })).concat([ADD_NEW_SENTINEL]);
+      var asgFullList = [''].concat(filteredAssignees().map(function(u) { return u.email || u; })).concat([ADD_NEW_SENTINEL]);
       var aIdx = asgFullList.indexOf(hiAssignee || '');
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -3236,12 +3316,12 @@ function showCombinedPicker(sourceNode) {
     var item = e.target.closest('.spick');
     if (!item) return;
     var id = item.dataset.id;
-    var hasChildren = nodes.some(function(c){ return c.parentId===id && c.isSection; });
+    var hasChildren = id !== NO_SECTION && nodes.some(function(c){ return c.parentId===id && c.isSection; });
     if (hasChildren) {
       pickerExpanded[id] = !pickerExpanded[id];
     }
     hiSection = id;
-    selectedSection = id;
+    selectedSection = (id === NO_SECTION) ? null : id;
     render();
   });
 
@@ -3263,12 +3343,19 @@ function showCombinedPicker(sourceNode) {
     render();
   });
 
+  // Search in the assignee column
+  var asgSearchEl = document.getElementById('asgSearch');
+  if (asgSearchEl) {
+    asgSearchEl.addEventListener('input', function(e) { asgQuery = e.target.value; render(); });
+    asgSearchEl.addEventListener('focus', function() { focusCol = 'assignee'; render(); });
+  }
+
   // Done button
   var doneBtn = document.getElementById('pickerDoneBtn');
   if (doneBtn) {
     doneBtn.onclick = function(e) {
       e.stopPropagation();
-      selectedSection = hiSection || selectedSection;
+      selectedSection = (hiSection === NO_SECTION) ? null : (hiSection || selectedSection);
       selectedAssignee = hiAssignee || null;
       confirm();
     };
@@ -3314,21 +3401,39 @@ function showAddMemberForm(parentOverlay, onSave) {
   };
 }
 
+function applyAssignmentFields(node, email) {
+  node.assignedTo = email || null;
+  node.assignedBy = email ? (currentUser || '') : null;
+  if (email) node.sharedWith = MomentumCore.mergeSharedWith(node.sharedWith, email);
+}
+
+function applyAssignment(node, email) {
+  pushUndo();
+  applyAssignmentFields(node, email);
+  scheduleSave(node);
+  render();
+}
+
 function applyPicker(node, sectionId, assigneeEmail) {
   pushUndo();
-  if (sectionId) node.parentId = sectionId;
-  node.assignedTo = assigneeEmail || null;
-  node.assignedBy = assigneeEmail ? (currentUser || '') : null;
+  var targetParent = sectionId || null;
+  node.parentId = targetParent;
+  applyAssignmentFields(node, assigneeEmail);
   node.date = node.date || localDateTime();
-  // Reposition in tree
+  // Reposition in tree (under the chosen section, or at the end of root level)
   var curIdx = nodes.findIndex(function(x) { return x.id === node.id; });
-  nodes.splice(curIdx, 1);
-  var parentIdx = nodes.findIndex(function(x) { return x.id === node.parentId; });
-  var parentDesc = parentIdx >= 0 ? descendants(node.parentId) : [];
-  var insertAfter = parentIdx;
-  for (var di = parentIdx + 1; di < nodes.length; di++) {
-    if (parentDesc.indexOf(nodes[di].id) > -1) insertAfter = di;
-    else break;
+  if (curIdx >= 0) nodes.splice(curIdx, 1);
+  var insertAfter;
+  if (targetParent) {
+    var parentIdx = nodes.findIndex(function(x) { return x.id === targetParent; });
+    var parentDesc = parentIdx >= 0 ? descendants(targetParent) : [];
+    insertAfter = parentIdx;
+    for (var di = parentIdx + 1; di < nodes.length; di++) {
+      if (parentDesc.indexOf(nodes[di].id) > -1) insertAfter = di;
+      else break;
+    }
+  } else {
+    insertAfter = nodes.length - 1; // append at the end (bottom of root level)
   }
   node.order = orderBetween(insertAfter, insertAfter + 1);
   nodes.splice(insertAfter + 1, 0, node);
@@ -3343,11 +3448,7 @@ function moveTo(node, parentId) {
 }
 
 function assignTo(node, email) {
-  pushUndo();
-  node.assignedTo = email || null;
-  node.assignedBy = email ? (currentUser || '') : null;
-  scheduleSave(node);
-  render();
+  applyAssignment(node, email);
 }
 
 function saveActiveInput() {
@@ -4478,7 +4579,7 @@ function switchUser() {
     nodes = [];
     teamMembers = [];
     selectedIds.clear();
-    lastPickedSection = null;
+    lastPickedSection = undefined;
     lastPickedAssignee = null;
     if (typeof google !== 'undefined' && google.accounts && _googleAccessToken) {
       google.accounts.oauth2.revoke(_googleAccessToken, function() {});

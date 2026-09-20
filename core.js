@@ -152,8 +152,45 @@
     });
   }
 
+  // Read a favourite record stored either as a legacy bare number (frequency) or
+  // as the newer { n: count, t: lastUsedMs } shape. Returns the count.
+  function favouriteCount(fav) {
+    if (fav == null) return 0;
+    if (typeof fav === 'number') return fav;
+    if (typeof fav === 'object' && typeof fav.n === 'number') return fav.n;
+    return 0;
+  }
+
+  function favouriteRecency(fav) {
+    if (fav && typeof fav === 'object' && typeof fav.t === 'number') return fav.t;
+    return 0;
+  }
+
+  // Rank a person by a combination of frequency and recency. Higher ranks first.
+  //   score = count + recencyWeight * 0.5 ^ (age / halfLifeMs)
+  // Legacy numeric favourites have no timestamp, so they contribute count only.
+  function assigneeScore(fav, nowMs, recencyWeight, halfLifeMs) {
+    var count = favouriteCount(fav);
+    var t = favouriteRecency(fav);
+    var weight = recencyWeight == null ? 10 : recencyWeight;
+    var half = halfLifeMs == null ? 7 * 24 * 60 * 60 * 1000 : halfLifeMs;
+    if (!(t > 0)) return count;
+    var now = nowMs == null ? Date.now() : nowMs;
+    var age = now - t;
+    if (age < 0) age = 0;
+    return count + weight * Math.pow(0.5, age / half);
+  }
+
+  // Merge an email into a comma-separated sharedWith list without duplicates.
+  function mergeSharedWith(sharedWith, email) {
+    var list = (sharedWith || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    if (list.indexOf(email) === -1) list.push(email);
+    return list.join(',');
+  }
+
   return { emptyQueue: emptyQueue, restoreQueue: restoreQueue, enqueueSave: enqueueSave,
     queueForRestore: queueForRestore, overlayQueue: overlayQueue, acknowledgeBatch: acknowledgeBatch, localDay: localDay,
     enqueueDelete: enqueueDelete, tokenIsValid: tokenIsValid, snapshotState: snapshotState,
-    diffForRestore: diffForRestore, validateBackup: validateBackup };
+    diffForRestore: diffForRestore, validateBackup: validateBackup,
+    favouriteCount: favouriteCount, assigneeScore: assigneeScore, mergeSharedWith: mergeSharedWith };
 });
