@@ -2000,10 +2000,10 @@ function openPeopleChooser(opts) {
   };
 
   if (search) {
+    // Only filter on typing. Arrow/Enter/Escape are handled by the single
+    // document-level keydown listener below — a second listener here would fire
+    // twice per keypress (search + document bubble) and skip one item per press.
     search.addEventListener('input', function(e) { query = e.target.value; renderList(); });
-    search.addEventListener('keydown', function(e) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape') onKey(e);
-    });
   }
   overlay.querySelector('#pcCancel').onclick = cleanup;
   overlay.querySelector('#pcOk').onclick = confirm;

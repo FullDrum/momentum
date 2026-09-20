@@ -163,3 +163,10 @@ test('structure: Ctrl+Shift+Enter opens assignee-only selection and leaves proje
   assert.match(src, /e\.key === 'Enter' && e\.shiftKey[\s\S]{0,60}\(e\.ctrlKey \|\| e\.metaKey\)/, 'Ctrl+Shift+Enter branch exists');
   assert.match(src, /showCombinedPicker\(cur\)/, 'Ctrl+Enter keeps the combined picker');
 });
+
+test('structure: people chooser handles each arrow key once (single keydown listener)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+  // The search input must not also wire keydown — the one document-level
+  // listener handles arrows; a second listener makes each press skip an item.
+  assert.doesNotMatch(src, /search\.addEventListener\('keydown'/);
+});
