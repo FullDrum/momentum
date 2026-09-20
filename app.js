@@ -1536,9 +1536,8 @@ function handleKey(e, inp) {
   }
 
   // ── Tab: indent (make child of node above at same level) ─────
-  // Disabled in flat views (Today / All Tasks / Assigned) — tree only
   if (e.key === 'Tab' && !e.shiftKey) {
-    if (inp.dataset.flat === 'true') return; // let browser handle Tab in flat views
+    if (activeTab === 'assigned') return; // keep Assigned flat
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
@@ -1550,6 +1549,9 @@ function handleKey(e, inp) {
       if (list[i].depth < curDepth) break;
     }
     if (!target) return;
+    // In date-grouped views, only nest within the same date group so the child
+    // stays under its new parent; cross-date nesting belongs in Projects.
+    if ((activeTab === 'today' || activeTab === 'all') && dateKey(target) !== dateKey(cur)) return;
     cur.parentId = target.id;
     collapsed[target.id] = false; saveCollapsed();
     // Move node after ALL of target's descendants (true last child position)
@@ -1571,7 +1573,7 @@ function handleKey(e, inp) {
 
   // ── Shift+Tab: outdent ───────────────────────────────────────
   if (e.key === 'Tab' && e.shiftKey) {
-    if (inp.dataset.flat === 'true') return;
+    if (activeTab === 'assigned') return;
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;

@@ -96,3 +96,14 @@ test('structure: same-date nesting and set-to-today cascade are wired', () => {
   assert.match(src, /dateKey\(c\) !== dateKey\(n\)/);
   assert.match(src, /setTaskToday\(/);
 });
+
+test('structure: Tab indent is enabled in Today/All Tasks with a same-date guard', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+  assert.doesNotMatch(src, /inp\.dataset\.flat === 'true'\) return/, 'flat-view Tab guard is removed');
+  assert.match(src, /dateKey\(target\) !== dateKey\(cur\)/, 'same-date indent guard exists');
+});
+
+test('structure: service worker auto-activates on install', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../sw.js'), 'utf8');
+  assert.match(src, /self\.skipWaiting\(\)/);
+});

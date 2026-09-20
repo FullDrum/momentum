@@ -1,4 +1,4 @@
-const CACHE_NAME = 'momentum-v13';
+const CACHE_NAME = 'momentum-v14';
 const APP_ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,9 @@ const APP_ASSETS = [
 ];
 
 self.addEventListener('install', event => {
+  // Activate the new version as soon as its cache is populated, so a refresh
+  // always picks up the latest assets instead of waiting on the update banner.
+  self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)));
 });
 
