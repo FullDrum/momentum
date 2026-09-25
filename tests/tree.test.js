@@ -143,3 +143,17 @@ test('drag: cycle prevention stops a parent being dropped into its own child', (
   c.performDrop(['a'], 'b', 'child');
   assert.equal(c.nodes.find(n => n.id === 'a').parentId, null, 'parent must not move into its own child');
 });
+
+test('All Tasks orders same-date top-level tasks by tree position, not date-time', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.nodes = [
+    node('b', 'B', null, '2026-09-19 10:00:00'), // tree-first, earlier time
+    node('a', 'A', null, '2026-09-19 12:00:00')  // tree-second, later time
+  ];
+  const ids = Array.from(c.visibleList(), r => r.node.id);
+  assert.deepEqual(ids, ['b', 'a'], 'tree order wins over date-time order');
+});

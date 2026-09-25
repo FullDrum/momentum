@@ -696,7 +696,15 @@ function visibleList() {
     doneFilter(n)
   );
   else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
-  tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // Today/All Tasks order by tree position (so drag reorder is visible); the
+  // date headers still group them in render(). Assigned stays date-sorted.
+  if (activeTab === 'today' || activeTab === 'all') {
+    var nodeIndex = {};
+    nodes.forEach(function(n, i) { nodeIndex[n.id] = i; });
+    tasks.sort(function(a, b) { return (nodeIndex[a.id] || 0) - (nodeIndex[b.id] || 0); });
+  } else {
+    tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
 
   // Expand each matched task with its children in tree order.
   // Children already in the task set only appear under their parent (deduped).
