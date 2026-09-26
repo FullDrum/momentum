@@ -188,6 +188,17 @@
     return list.join(',');
   }
 
+  function replaceAssignmentShare(sharedWith, previousEmail, nextEmail) {
+    var previous = String(previousEmail || '').trim().toLowerCase();
+    var next = String(nextEmail || '').trim().toLowerCase();
+    var list = (sharedWith || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    if (previous && previous !== next) {
+      list = list.filter(function(email) { return email.toLowerCase() !== previous; });
+    }
+    if (next && !list.some(function(email) { return email.toLowerCase() === next; })) list.push(next);
+    return list.join(',');
+  }
+
   function escapeHtml(value) {
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -234,5 +245,6 @@
     enqueueDelete: enqueueDelete, tokenIsValid: tokenIsValid, snapshotState: snapshotState,
     diffForRestore: diffForRestore, validateBackup: validateBackup,
     favouriteCount: favouriteCount, assigneeScore: assigneeScore, mergeSharedWith: mergeSharedWith,
+    replaceAssignmentShare: replaceAssignmentShare,
     escapeHtml: escapeHtml, sanitizeUrl: sanitizeUrl, renderMarkdown: renderMarkdown };
 });

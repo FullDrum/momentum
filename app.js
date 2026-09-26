@@ -3550,9 +3550,10 @@ function showAddMemberForm(parentOverlay, onSave) {
 }
 
 function applyAssignmentFields(node, email) {
+  var previous = node.assignedTo;
   node.assignedTo = email || null;
   node.assignedBy = email ? (currentUser || '') : null;
-  if (email) node.sharedWith = MomentumCore.mergeSharedWith(node.sharedWith, email);
+  node.sharedWith = MomentumCore.replaceAssignmentShare(node.sharedWith, previous, email);
 }
 
 function applyAssignment(node, email) {

@@ -123,7 +123,7 @@ test('assignee-only assignment leaves parentId, date and order untouched and mer
   assert.equal(n.sharedWith, 'x@y.z,bob@example.com');
 });
 
-test('assignee-only assignment to no-one clears assignedTo/assignedBy but keeps sharedWith', () => {
+test('assignee-only assignment to no-one removes the old assignment share', () => {
   const a = app(); a.login();
   a.c.nodes = [
     { id: 't1', name: 'Task', parentId: 'sec', isSection: false, done: false, order: 200,
@@ -132,7 +132,17 @@ test('assignee-only assignment to no-one clears assignedTo/assignedBy but keeps 
   a.c.applyAssignment(a.c.nodes[0], null);
   assert.equal(a.c.nodes[0].assignedTo, null);
   assert.equal(a.c.nodes[0].assignedBy, null);
-  assert.equal(a.c.nodes[0].sharedWith, 'bob@example.com');
+  assert.equal(a.c.nodes[0].sharedWith, '');
+});
+
+test('reassignment removes the old assignee but keeps other shares', () => {
+  const a = app(); a.login();
+  const node = { id: 't1', name: 'Task', owner: 'alice@example.com',
+    assignedTo: 'bob@example.com', sharedWith: 'bob@example.com,lee@example.com' };
+  a.c.nodes = [node];
+  a.c.applyAssignment(node, 'pat@example.com');
+  assert.equal(node.assignedTo, 'pat@example.com');
+  assert.equal(node.sharedWith, 'lee@example.com,pat@example.com');
 });
 
 test('defaultParentForNewTask honours an explicit No-project choice', () => {
