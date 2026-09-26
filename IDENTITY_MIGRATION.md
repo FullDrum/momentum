@@ -33,7 +33,9 @@ any of those email fields or used as an access grant.
 
 1. Back up the Sheet. Export the current `Code.gs`, Apps Script manifest, and header
    row to a local, reviewable copy before editing. Keep deployment IDs and private
-   configuration out of Git.
+   configuration out of Git. `backend/Code.gs` is now a tracked, scrubbed copy of
+   the live source; `node scripts/build-backend.js` prepares an ignored
+   `.private/Code.deploy.gs` using the Sheet ID from `.private/Code.gs`.
 2. Add the people table and `assigneePersonId` column. Backfill one person for each
    unique legacy assignee email, reusing an existing team entry where possible.
    Normalise emails for matching, but keep the stored `assignedTo` unchanged until
@@ -61,8 +63,8 @@ The pure rules for person creation, email linking, legacy backfill planning, and
 assignment-field transitions now live in `identity.js` with local tests. They are
 not yet wired into the frontend or the Apps Script backend.
 
-`backend/People.gs` is the tested Apps Script people-table implementation. It is
-local source only. Before deployment, add it to the script project, route `getPeople`
-and `savePerson` through `routeFunction`, include both in the owner-only route list,
-and test against a disposable Sheet. It does not yet backfill existing assignments
-or add `assigneePersonId` to the nodes Sheet.
+`backend/People.gs` is the tested Apps Script people-table implementation.
+`backend/Code.gs` routes `getPeople` and `savePerson` with owner-only checks. Both
+files are local source only; neither is deployed. Test them against a disposable
+Sheet before deployment. They do not yet backfill existing assignments or add
+`assigneePersonId` to the nodes Sheet.

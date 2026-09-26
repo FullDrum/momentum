@@ -20,6 +20,7 @@ function backend() {
   const context = vm.createContext({
     SHEET_ID: 'test-sheet',
     SpreadsheetApp: { openById() { return {
+      getOwner() { return { getEmail() { return 'owner@example.com'; } }; },
       getSheetByName() { return peopleRows ? sheet : null; },
       insertSheet() { peopleRows = []; return sheet; }
     }; } },
@@ -51,4 +52,18 @@ test('adding an email keeps the ID and rejects duplicate links', () => {
   assert.equal(b.context.savePerson({ personId: first.personId, name: 'Pat', email: second.email }, 'owner@example.com').error,
     'Email already linked to another person');
   assert.equal(b.rows().length, 3);
+});
+
+test('the API route rejects non-owners and returns saved people to the owner', () => {
+  const b = backend();
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../backend/Code.gs'), 'utf8'), b.context);
+  assert.equal(b.context.routeFunction('savePerson', { name: 'Pat' }, 'outsider@example.com').error,
+    'Permission denied');
+  assert.equal(b.context.routeFunction('getPeople', null, 'outsider@example.com').error,
+    'Permission denied');
+  const saved = b.context.routeFunction('savePerson', { name: 'Pat' }, 'owner@example.com');
+  assert.equal(saved.person.status, 'provisional');
+  const listed = b.context.routeFunction('getPeople', null, 'owner@example.com');
+  assert.equal(listed.people.length, 1);
+  assert.equal(listed.people[0].personId, saved.person.personId);
 });
