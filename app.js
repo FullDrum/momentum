@@ -651,7 +651,6 @@ function ancestors(id) {
   return a;
 }
 function breadcrumb(id) { return ancestors(id).map(n => n.name || '…').join(' › '); }
-function dateKey(n) { return n.date ? String(n.date).slice(0, 10) : 'undated'; }
 // Set a task (and its whole subtree) to today so the group moves together. Call
 // pushUndo() before invoking; the caller renders.
 function setTaskToday(n) {
@@ -728,9 +727,6 @@ function visibleList() {
       // Keep watched and active tasks in separate top-level lists in both
       // All Tasks and Today.
       if ((activeTab === 'all' || activeTab === 'today') && c.watching !== n.watching) return false;
-      // In Today/All Tasks, only nest a child under its parent when they share
-      // a date group; a different-date child is a top-level entry in its own group.
-      if ((activeTab === 'all' || activeTab === 'today') && dateKey(c) !== dateKey(n)) return false;
       return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
     }).forEach(function(c) {
       result = result.concat(expandNode(c, depth + 1));
@@ -742,13 +738,11 @@ function visibleList() {
   tasks.forEach(function(n) {
     if (seen.has(n.id)) return; // already rendered as a child
     // A node renders under its parent only when the parent is also a task in
-    // this view AND (for Today/All Tasks) they share a date group.
+    // this view.
     var parentTask = n.parentId ? nodes.find(function(x) { return x.id === n.parentId; }) : null;
     var separateWatchList = (activeTab === 'all' || activeTab === 'today') &&
       parentTask && n.watching !== parentTask.watching;
-    var nestsUnderParent = n.parentId && taskSet.has(n.parentId) && !separateWatchList &&
-      (activeTab === 'assigned' || dateKey(n) === dateKey(parentTask));
-    if (nestsUnderParent) return;
+    if (n.parentId && taskSet.has(n.parentId) && !separateWatchList) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
   return expanded;
@@ -857,20 +851,15 @@ function render(preserveScroll) {
   if (selectedIds.size > 0) updateSelectionStyles();
   setTimeout(() => { suppressBlur = false; }, 200); // re-enable blur after render settles
   if (focusId) {
-    var fid = focusId;
+    var inp = document.getElementById('inp_' + focusId);
+    var disp = document.getElementById('disp_' + focusId);
+    mlog('[MOM] render-focus id=', focusId, 'inp=', !!inp, 'disp=', !!disp);
+    if (inp) {
+      switchToEdit(inp, disp);
+      var l = inp.value.length;
+      try { inp.setSelectionRange(l, l); } catch(e) {}
+    }
     focusId = null;
-    // Focus on the next frame so the DOM (and its layout) is fully settled;
-    // a synchronous focus() right after innerHTML rebuild can be dropped when
-    // the node moved (e.g. Tab-indent).
-    requestAnimationFrame(function() {
-      var inp = document.getElementById('inp_' + fid);
-      var disp = document.getElementById('disp_' + fid);
-      if (inp) {
-        switchToEdit(inp, disp);
-        var l = inp.value.length;
-        try { inp.setSelectionRange(l, l); } catch(e) {}
-      }
-    });
   } else if (preserveScroll && savedScroll) {
     el.scrollTop = savedScroll;
   }
@@ -1589,6 +1578,7 @@ function handleKey(e, inp) {
     // group (rather than blocking an indent when the dates differ).
     if (activeTab === 'today' || activeTab === 'all') cur.date = target.date;
     cur.parentId = target.id;
+    mlog('[MOM] tab-indent', id, '->', target.id, 'activeElement=', document.activeElement && document.activeElement.id);
     collapsed[target.id] = false; saveCollapsed();
     // Move node after ALL of target's descendants (true last child position)
     var curIdx = nodes.findIndex(x => x.id === id);
@@ -3746,10 +3736,6 @@ function performDrop(srcIds, tgtId, mode) {
   // leaves the data untouched.
   var isAssigned = (activeTab === 'assigned');
   if (mode === 'child' && isAssigned) mode = 'below';
-  if (mode === 'child' && (activeTab === 'today' || activeTab === 'all')) {
-    var firstSrc = nodes.find(function(x) { return x.id === srcIds[0]; });
-    if (firstSrc && dateKey(firstSrc) !== dateKey(tgt)) mode = 'below'; // cross-date nesting belongs in Projects
-  }
   if (mode === 'child' && !canEdit(tgt)) return; // cannot nest under a read-only node
 
   pushUndo();

@@ -54,12 +54,12 @@ test('All Tasks nests same-date children under their parent and separates differ
   const ids = rows.map(r => r.id);
   const depth = id => rows.find(r => r.id === id).depth;
   assert.equal(depth('p'), 0);
-  assert.equal(depth('c1'), 1, 'same-date child nests under parent');
-  assert.equal(depth('c2'), 0, 'different-date child is a top-level entry');
-  assert.equal(ids.indexOf('c1'), ids.indexOf('p') + 1, 'same-date child is adjacent to parent');
+  assert.equal(depth('c1'), 1, 'child nests under parent');
+  assert.equal(depth('c2'), 1, 'differently-dated child still nests under its parent');
+  assert.equal(ids.indexOf('c1'), ids.indexOf('p') + 1, 'child is adjacent to parent');
 });
 
-test('Today excludes a child whose date is not today', () => {
+test('Today shows the whole subtree regardless of child date', () => {
   const c = app();
   c.activeTab = 'today';
   c.hideDone = false;
@@ -72,7 +72,7 @@ test('Today excludes a child whose date is not today', () => {
   ];
   const ids = Array.from(c.visibleList(), r => r.node.id);
   assert.ok(ids.includes('p') && ids.includes('c1'), 'today parent and same-date child appear');
-  assert.ok(!ids.includes('c2'), 'non-today child must not appear in Today');
+  assert.ok(ids.includes('c2'), 'non-today child still appears under its parent');
 });
 
 test('setTaskToday cascades today date to the whole subtree', () => {
@@ -89,11 +89,9 @@ test('setTaskToday cascades today date to the whole subtree', () => {
   assert.equal(day('c2'), '2026-09-19');
 });
 
-test('structure: same-date nesting and set-to-today cascade are wired', () => {
+test('structure: set-to-today cascade is wired', () => {
   const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
-  assert.match(src, /function dateKey/);
   assert.match(src, /function setTaskToday/);
-  assert.match(src, /dateKey\(c\) !== dateKey\(n\)/);
   assert.match(src, /setTaskToday\(/);
 });
 
@@ -120,7 +118,7 @@ test('drag: same-date child drop nests in All Tasks', () => {
   assert.equal(c.nodes.find(n => n.id === 'b').parentId, 'a');
 });
 
-test('drag: cross-date child drop does not nest in All Tasks', () => {
+test('drag: cross-date child drop nests in All Tasks', () => {
   const c = app();
   c.activeTab = 'all';
   c.collapsed = {};
@@ -129,7 +127,7 @@ test('drag: cross-date child drop does not nest in All Tasks', () => {
     node('b', 'B', null, '2026-09-20 10:00:00')
   ];
   c.performDrop(['b'], 'a', 'child');
-  assert.equal(c.nodes.find(n => n.id === 'b').parentId, null, 'cross-date drop stays reorder-only');
+  assert.equal(c.nodes.find(n => n.id === 'b').parentId, 'a', 'cross-date child drop nests like any other');
 });
 
 test('drag: cycle prevention stops a parent being dropped into its own child', () => {
