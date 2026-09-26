@@ -1285,7 +1285,9 @@ function attachEvents() {
     inp.onblur = () => {
       hideKbBar();
       if (suppressBlur) { return; }
-      focusId = null; // a real blur means no node is being edited anymore
+      // Only clear the tracked node if this blur was the node we were editing —
+      // a late blur from a render-rebuild (old element) must not clobber the new one.
+      if (focusId === inp.dataset.id) focusId = null;
       var n = nodes.find(x => x.id === inp.dataset.id);
       if (!n) return;
       // Always capture the live input value into the node
