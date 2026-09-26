@@ -860,7 +860,6 @@ function render(preserveScroll) {
       var l = inp.value.length;
       try { inp.setSelectionRange(l, l); } catch(e) {}
     }
-    focusId = null;
   } else if (preserveScroll && savedScroll) {
     el.scrollTop = savedScroll;
   }
@@ -1286,6 +1285,7 @@ function attachEvents() {
     inp.onblur = () => {
       hideKbBar();
       if (suppressBlur) { return; }
+      focusId = null; // a real blur means no node is being edited anymore
       var n = nodes.find(x => x.id === inp.dataset.id);
       if (!n) return;
       // Always capture the live input value into the node
