@@ -196,3 +196,59 @@ test('Enter on a differently-dated child still creates a sibling in the same par
   assert.ok(nn, 'a new node was created');
   assert.equal(nn.parentId, 'p', 'new node is a sibling in the same parent, not a root');
 });
+
+test('workflow: type parent, Enter, then Tab nests the new node under the parent', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.lastPickedSection = undefined;
+  c.nodes = [ node('p', 'Parent', null, '2026-09-19 10:00:00') ];
+
+  // User is editing 'p' and presses Enter -> new empty sibling appears above it.
+  c.handleKey(
+    { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} },
+    { dataset: { id: 'p', flat: 'true' }, value: 'Parent' }
+  );
+  const newId = c.focusId;
+  assert.ok(newId && newId !== 'p', 'new node created and focused');
+  assert.equal(c.nodes[0].id, newId, 'new node sits above the parent');
+  assert.equal(c.nodes[1].id, 'p');
+
+  // User types the child's name, then presses Tab -> it nests under the parent.
+  c.nodes.find(n => n.id === newId).name = 'Child';
+  c.handleKey(
+    { key: 'Tab', shiftKey: false, preventDefault() {} },
+    { dataset: { id: newId, flat: 'true' }, value: 'Child' }
+  );
+  assert.equal(c.nodes.find(n => n.id === newId).parentId, 'p', 'Tab nested the node under the parent');
+  assert.deepEqual(c.nodes.map(n => n.id), ['p', newId], 'child now sits below the parent');
+});
+
+test('workflow: Tab-indent a task, then Enter creates a sibling in that parent', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    node('x', 'Task', null, '2026-09-19 12:00:00')
+  ];
+
+  c.handleKey(
+    { key: 'Tab', shiftKey: false, preventDefault() {} },
+    { dataset: { id: 'x', flat: 'true' }, value: 'Task' }
+  );
+  assert.equal(c.nodes.find(n => n.id === 'x').parentId, 'p', 'x became a child of p');
+
+  c.handleKey(
+    { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} },
+    { dataset: { id: 'x', flat: 'true' }, value: 'Task' }
+  );
+  const nn = c.nodes.find(n => n.id !== 'p' && n.id !== 'x');
+  assert.ok(nn, 'new node created');
+  assert.equal(nn.parentId, 'p', 'new node is a sibling under p');
+  assert.equal(c.focusId, nn.id, 'new node is focused');
+});
