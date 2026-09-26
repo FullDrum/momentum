@@ -727,7 +727,7 @@ function visibleList() {
       // Keep watched and active tasks in separate top-level lists in both
       // All Tasks and Today.
       if ((activeTab === 'all' || activeTab === 'today') && c.watching !== n.watching) return false;
-      return !c.isSection && (c.name && c.name.trim()) && doneFilter(c);
+      return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId) && doneFilter(c);
     }).forEach(function(c) {
       result = result.concat(expandNode(c, depth + 1));
     });

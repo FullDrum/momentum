@@ -254,6 +254,8 @@ test('workflow: Enter -> type Parent -> Enter -> Tab (empty sibling) -> type Chi
   );
   assert.equal(c.nodes.find(n => n.id === t2).parentId, t1, 'empty sibling indented under parent');
   assert.equal(c.focusId, t2, 'cursor stays on the indented sibling');
+  assert.deepEqual(Array.from(c.visibleList(), r => ({ id: r.node.id, depth: r.depth })),
+    [{ id: t1, depth: 0 }, { id: t2, depth: 1 }], 'focused empty child stays rendered');
 
   // type Child
   c.nodes.find(n => n.id === t2).name = 'Child';
