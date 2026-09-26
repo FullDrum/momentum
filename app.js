@@ -1283,6 +1283,10 @@ function attachEvents() {
   });
   el.querySelectorAll('.node-input:not([readonly])').forEach(inp => {
     inp.onblur = () => {
+      // A render can replace this textarea with a new one for the same node.
+      // Ignore a late blur from the detached element so it cannot hide the
+      // replacement input or clear its focus tracking after Tab/Shift+Tab.
+      if (document.getElementById('inp_' + inp.dataset.id) !== inp) return;
       hideKbBar();
       if (suppressBlur) { return; }
       // Only clear the tracked node if this blur was the node we were editing —

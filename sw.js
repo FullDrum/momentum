@@ -1,4 +1,4 @@
-const CACHE_NAME = 'momentum-v26';
+const CACHE_NAME = 'momentum-v27';
 const APP_ASSETS = [
   './',
   './index.html',

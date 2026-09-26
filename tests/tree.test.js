@@ -261,6 +261,25 @@ test('workflow: Enter -> type Parent -> Enter -> Tab (empty sibling) -> type Chi
   assert.equal(c.nodes.find(n => n.id === t2).parentId, t1, 'child remains nested');
 });
 
+test('a stale blur after Tab cannot dismiss the replacement child editor', () => {
+  const c = app();
+  const oldInput = { dataset: { id: 'child' }, addEventListener() {} };
+  const newInput = { dataset: { id: 'child' } };
+  const tree = {
+    querySelectorAll(selector) {
+      return selector === '.node-input:not([readonly])' ? [oldInput] : [];
+    }
+  };
+  c.document.getElementById = id => id === 'treeEl' ? tree : id === 'inp_child' ? newInput : null;
+  c.focusId = 'child';
+  c.suppressBlur = false;
+  c._origAttachEvents();
+
+  oldInput.onblur();
+
+  assert.equal(c.focusId, 'child', 'the child remains the keyboard target');
+});
+
 test('workflow: Tab-indent a task, then Enter creates a sibling in that parent', () => {
   const c = app();
   c.activeTab = 'all';
