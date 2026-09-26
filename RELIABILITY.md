@@ -18,18 +18,19 @@ Run `npm test` (Node 22, matching CI). The reliability tests execute the actual
 application functions with simulated storage, time and API responses. Rendering
 is stubbed; these are not signed-in browser or live backend tests.
 
-## Before production deployment
+## Backend verification before a sync deployment
 
 The Apps Script source is outside this repository. On 19 September 2026, read-only
-inspection confirmed that the active endpoint uses version 292 and its Code.gs
-exactly matches the current editor source.
+inspection found that the then-active endpoint used version 292 and its Code.gs
+matched the editor source at that time. This is historical evidence, not a check
+of the currently deployed backend.
 
-The source returns the required acknowledgement arrays and updates existing saves
-by task ID. Repeated deletion of an absent ID succeeds. However, version 292
-fabricates successful bulk-delete acknowledgements for permission-denied tasks.
-A separate two-function backend replacement has been prepared and tested locally;
-it must be applied and deployed before this frontend release. No production
-backend or Sheet was modified during review.
+That source returned the required acknowledgement arrays and updated existing saves
+by task ID. Repeated deletion of an absent ID succeeded. However, version 292
+fabricated successful bulk-delete acknowledgements for permission-denied tasks.
+A separate two-function backend replacement was prepared and tested locally.
+Verify whether it was deployed before relying on the frontend acknowledgement
+handling. No production backend or Sheet was modified during the 19 September review.
 
 Confirm against a test Sheet before release:
 
@@ -41,7 +42,7 @@ Confirm against a test Sheet before release:
   applies a request, so replay must be idempotent.
 - Edit during a slow save, reload during a save, undo during a save, and switch
   accounts while offline. Check the restored data after reconnecting.
-- Verify the service-worker update prompt loads the new assets and that the Today
+- Verify the service worker activates the new cache/assets and that the Today
   view advances when returning to the app on the next local day.
 
 This change does not provide server-side concurrent-edit conflict resolution or
