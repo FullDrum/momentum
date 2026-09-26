@@ -857,14 +857,20 @@ function render(preserveScroll) {
   if (selectedIds.size > 0) updateSelectionStyles();
   setTimeout(() => { suppressBlur = false; }, 200); // re-enable blur after render settles
   if (focusId) {
-    var inp = document.getElementById('inp_' + focusId);
-    var disp = document.getElementById('disp_' + focusId);
-    if (inp) {
-      switchToEdit(inp, disp);
-      var l = inp.value.length;
-      try { inp.setSelectionRange(l, l); } catch(e) {}
-    }
+    var fid = focusId;
     focusId = null;
+    // Focus on the next frame so the DOM (and its layout) is fully settled;
+    // a synchronous focus() right after innerHTML rebuild can be dropped when
+    // the node moved (e.g. Tab-indent).
+    requestAnimationFrame(function() {
+      var inp = document.getElementById('inp_' + fid);
+      var disp = document.getElementById('disp_' + fid);
+      if (inp) {
+        switchToEdit(inp, disp);
+        var l = inp.value.length;
+        try { inp.setSelectionRange(l, l); } catch(e) {}
+      }
+    });
   } else if (preserveScroll && savedScroll) {
     el.scrollTop = savedScroll;
   }
