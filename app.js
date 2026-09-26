@@ -635,6 +635,15 @@ function normalizeNodes(raw) {
 }
 
 function children(pid) { return nodes.filter(n => (n.parentId === pid) || (!pid && !n.parentId)); }
+// Index of the first node with the given parentId — the top of that sibling block,
+// so new tasks can be inserted at the top instead of the bottom.
+function topOfSiblingsIndex(pid) {
+  var p = pid || null;
+  for (var i = 0; i < nodes.length; i++) {
+    if ((nodes[i].parentId || null) === p) return i;
+  }
+  return nodes.length;
+}
 function descendants(id) { return children(id).flatMap(c => [c.id, ...descendants(c.id)]); }
 function ancestors(id) {
   var a = []; var n = nodes.find(x => x.id === id);
@@ -1395,8 +1404,8 @@ function handleKey(e, inp) {
   }
 
   // Flat view Enter:
-  //   depth 0 (root task) → new flat task with today's date (current behaviour)
-  //   depth > 0 (child)   → new tree sibling after descendants, same parentId, inherits date
+  //   depth 0 (root task) → new flat task with today's date, inserted at the top
+  //   depth > 0 (child)   → new sibling in the same parent, inserted at the top
   if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey && (inp.dataset.flat === 'true' || inp.dataset.flat === true)) {
     e.preventDefault();
     pushUndo();
@@ -1404,38 +1413,34 @@ function handleKey(e, inp) {
     if (cur.name.trim()) {
       scheduleSave(cur);
     }
-    var si = nodes.findIndex(x => x.id === id);
-    var ownDesc = descendants(id);
-    var insertAt = si + 1;
-    for (var di = si + 1; di < nodes.length; di++) {
-      if (ownDesc.indexOf(nodes[di].id) > -1) insertAt = di + 1;
-      else break;
-    }
     var currentDepth = vi > -1 ? (list[vi].depth || 0) : 0;
+    var newParentId;
     var nn;
     if (currentDepth === 0) {
       // Root flat node — new task with today's date under the picked section
+      newParentId = defaultParentForNewTask(cur.parentId);
       nn = {
         id: newId(), name: '',
-        parentId: defaultParentForNewTask(cur.parentId),
+        parentId: newParentId,
         isSection: false, done: false,
         date: localDateTime(),
         owner: currentUser,
         assignedTo: lastPickedAssignee || null,
-        assignedBy: lastPickedAssignee ? (currentUser || '') : null,
-        order: orderBetween(insertAt - 1, insertAt)
+        assignedBy: lastPickedAssignee ? (currentUser || '') : null
       };
     } else {
-      // Child node — tree sibling, same parentId, inherit date so it stays visible
+      // Child node — sibling in the same parent, inherits date so it stays visible
+      newParentId = cur.parentId || null;
       nn = {
         id: newId(), name: '',
-        parentId: cur.parentId || null,
+        parentId: newParentId,
         isSection: false, done: false,
         date: cur.date || null,
-        owner: currentUser,
-        order: orderBetween(insertAt - 1, insertAt)
+        owner: currentUser
       };
     }
+    var insertAt = topOfSiblingsIndex(newParentId);
+    nn.order = orderBetween(insertAt - 1, insertAt);
     nodes.splice(insertAt, 0, nn);
     focusId = nn.id;
     render();

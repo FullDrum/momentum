@@ -157,3 +157,24 @@ test('All Tasks orders same-date top-level tasks by tree position, not date-time
   const ids = Array.from(c.visibleList(), r => r.node.id);
   assert.deepEqual(ids, ['b', 'a'], 'tree order wins over date-time order');
 });
+
+test('Enter in a child inserts a new sibling at the top of the same parent', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    node('c', 'Child', 'p', '2026-09-19 12:00:00')
+  ];
+  const inp = { dataset: { id: 'c', flat: 'true' }, value: 'Child' };
+  const e = { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} };
+  c.handleKey(e, inp);
+  assert.equal(c.nodes.length, 3);
+  assert.equal(c.nodes[0].id, 'p');
+  assert.equal(c.nodes[1].parentId, 'p', 'new task is in the same parent');
+  assert.notEqual(c.nodes[1].id, 'c', 'new sibling sits before the child');
+  assert.equal(c.nodes[2].id, 'c');
+  assert.equal(c.focusId, c.nodes[1].id, 'new task is focused');
+});
