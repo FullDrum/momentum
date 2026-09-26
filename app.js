@@ -1404,8 +1404,8 @@ function handleKey(e, inp) {
   }
 
   // Flat view Enter:
-  //   depth 0 (root task) → new flat task with today's date, inserted at the top
-  //   depth > 0 (child)   → new sibling in the same parent, inserted at the top
+  //   child of a task  → new sibling in the same parent, directly below it
+  //   top-level task   → new root task, directly below it
   if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey) && !e.altKey && (inp.dataset.flat === 'true' || inp.dataset.flat === true)) {
     e.preventDefault();
     pushUndo();
@@ -1441,7 +1441,15 @@ function handleKey(e, inp) {
         assignedBy: lastPickedAssignee ? (currentUser || '') : null
       };
     }
-    var insertAt = topOfSiblingsIndex(newParentId);
+    // Insert directly below the current node (after its subtree), so siblings
+    // stack downward.
+    var si = nodes.findIndex(function(x) { return x.id === id; });
+    var ownDesc = descendants(id);
+    var insertAt = si + 1;
+    for (var di = si + 1; di < nodes.length; di++) {
+      if (ownDesc.indexOf(nodes[di].id) > -1) insertAt = di + 1;
+      else break;
+    }
     nn.order = orderBetween(insertAt - 1, insertAt);
     nodes.splice(insertAt, 0, nn);
     focusId = nn.id;
@@ -1664,17 +1672,13 @@ function addRoot() {
 
 function addTodayTask() {
   pushUndo();
-  var parentId = defaultParentForNewTask(null);
   var n = {
-    id: newId(), name: '', parentId: parentId,
+    id: newId(), name: '', parentId: defaultParentForNewTask(null),
     isSection: false, done: false,
     date: localDateTime(), owner: currentUser,
-    assignedTo: lastPickedAssignee || null,
-    assignedBy: lastPickedAssignee ? (currentUser || '') : null
+    order: Date.now()
   };
-  var insertAt = topOfSiblingsIndex(parentId);
-  n.order = orderBetween(insertAt - 1, insertAt);
-  nodes.splice(insertAt, 0, n);
+  nodes.push(n);
   focusId = n.id;
   render();
 }

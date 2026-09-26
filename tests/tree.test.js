@@ -158,7 +158,7 @@ test('All Tasks orders same-date top-level tasks by tree position, not date-time
   assert.deepEqual(ids, ['b', 'a'], 'tree order wins over date-time order');
 });
 
-test('Enter in a child inserts a new sibling at the top of the same parent', () => {
+test('Enter in a child inserts a new sibling below it in the same parent', () => {
   const c = app();
   c.activeTab = 'today';
   c.hideDone = false;
@@ -173,10 +173,9 @@ test('Enter in a child inserts a new sibling at the top of the same parent', () 
   c.handleKey(e, inp);
   assert.equal(c.nodes.length, 3);
   assert.equal(c.nodes[0].id, 'p');
-  assert.equal(c.nodes[1].parentId, 'p', 'new task is in the same parent');
-  assert.notEqual(c.nodes[1].id, 'c', 'new sibling sits before the child');
-  assert.equal(c.nodes[2].id, 'c');
-  assert.equal(c.focusId, c.nodes[1].id, 'new task is focused');
+  assert.equal(c.nodes[1].id, 'c');
+  assert.equal(c.nodes[2].parentId, 'p', 'new task is in the same parent');
+  assert.equal(c.focusId, c.nodes[2].id, 'new task is focused');
 });
 
 test('Enter on a differently-dated child still creates a sibling in the same parent', () => {
@@ -206,15 +205,15 @@ test('workflow: type parent, Enter, then Tab nests the new node under the parent
   c.lastPickedSection = undefined;
   c.nodes = [ node('p', 'Parent', null, '2026-09-19 10:00:00') ];
 
-  // User is editing 'p' and presses Enter -> new empty sibling appears above it.
+  // User is editing 'p' and presses Enter -> new empty sibling appears below it.
   c.handleKey(
     { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} },
     { dataset: { id: 'p', flat: 'true' }, value: 'Parent' }
   );
   const newId = c.focusId;
   assert.ok(newId && newId !== 'p', 'new node created and focused');
-  assert.equal(c.nodes[0].id, newId, 'new node sits above the parent');
-  assert.equal(c.nodes[1].id, 'p');
+  assert.equal(c.nodes[0].id, 'p');
+  assert.equal(c.nodes[1].id, newId, 'new node sits below the parent');
 
   // User types the child's name, then presses Tab -> it nests under the parent.
   c.nodes.find(n => n.id === newId).name = 'Child';
@@ -292,7 +291,7 @@ test('Enter on an older child aligns the new sibling to the parent date', () => 
   assert.equal(nn.date.slice(0, 10), '2026-09-19', 'sibling date aligned to the parent date');
 });
 
-test('addTodayTask creates a new empty task at the top and focuses it', () => {
+test('addTodayTask creates a new empty task at the bottom and focuses it', () => {
   const c = app();
   c.activeTab = 'today';
   c.hideDone = false;
@@ -304,7 +303,7 @@ test('addTodayTask creates a new empty task at the top and focuses it', () => {
   assert.equal(c.nodes.length, 2);
   const nn = c.nodes.find(n => n.id !== 'p');
   assert.ok(nn, 'new node created');
-  assert.equal(c.nodes[0].id, nn.id, 'new node is at the top');
+  assert.equal(c.nodes[1].id, nn.id, 'new node is at the bottom');
   assert.equal(nn.date.slice(0, 10), '2026-09-19', 'new node is dated today');
   assert.equal(c.focusId, nn.id, 'new node is focused');
 });
