@@ -60,3 +60,9 @@ change the running app or its access rules.
 The pure rules for person creation, email linking, legacy backfill planning, and
 assignment-field transitions now live in `identity.js` with local tests. They are
 not yet wired into the frontend or the Apps Script backend.
+
+`backend/People.gs` is the tested Apps Script people-table implementation. It is
+local source only. Before deployment, add it to the script project, route `getPeople`
+and `savePerson` through `routeFunction`, include both in the owner-only route list,
+and test against a disposable Sheet. It does not yet backfill existing assignments
+or add `assigneePersonId` to the nodes Sheet.

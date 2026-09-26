@@ -4,3 +4,6 @@
 !.dev.vars.example
 .env*
 !.env.example
+
+# Local Apps Script exports may contain a Sheet ID or other private settings.
+.private/
