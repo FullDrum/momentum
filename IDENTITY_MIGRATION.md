@@ -8,8 +8,10 @@ any of those email fields or used as an access grant.
 ## User behaviour
 
 - The manager can create a person with a name and no email, then assign tasks to them.
-- Those tasks appear in the manager's views under that person's name. They are not
-  visible to any team account until an email is linked and authorised.
+- Those tasks appear in the manager's views under that person's name. The
+  assignment itself grants no team account access until an email is linked and
+  authorised. Existing project or explicit sharing rules may still expose a task;
+  the backend must check those rules before claiming a task is manager-only.
 - Adding or changing an email does not change the person's ID or their assignments.
 - Existing email assignments still appear under the correct person after migration.
 
@@ -37,8 +39,10 @@ any of those email fields or used as an access grant.
    Normalise emails for matching, but keep the stored `assignedTo` unchanged until
    each row is linked. Log duplicate/conflicting email rows for manual resolution.
 3. Deploy server reads that return both fields and server writes that accept either
-   a legacy email or a person ID. Derive `assignedTo` and `sharedWith` on the server
-   from the person record. Reject unknown IDs and duplicate email links.
+   a legacy email or a person ID. Derive `assignedTo` on the server
+   from the person record. Remove the prior assignment's legacy share when changing
+   assignees, and review any separate project/explicit shares. Reject unknown IDs
+   and duplicate email links.
 4. Update the frontend picker, badges, favourites, and forms to use `personId`.
    The add-person form accepts a name alone; an email can be linked later. Existing
    local queued saves and backups using email are still accepted during transition.
@@ -52,3 +56,7 @@ any of those email fields or used as an access grant.
 The live owner-only backend read after version 294 confirms the present `COLS`
 still has email fields and no `assigneePersonId`. This document does not itself
 change the running app or its access rules.
+
+The pure rules for person creation, email linking, legacy backfill planning, and
+assignment-field transitions now live in `identity.js` with local tests. They are
+not yet wired into the frontend or the Apps Script backend.

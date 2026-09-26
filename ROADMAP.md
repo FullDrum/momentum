@@ -54,8 +54,11 @@ dependency order and split into backend prerequisites and later features.
 2. **Stable `personId` + provisional name-only people** — replace email-as-identity with a
    stable `personId` (name, optional email, status); migrate legacy email assignments; let a
    manager create a person by name and attach an email later without breaking prior assignments.
-   Name-only people are assignable immediately; their tasks stay manager-visible only until
-   an authorised email is linked. See `IDENTITY_MIGRATION.md` for the rollout contract.
+   Name-only people are assignable immediately; the assignment grants no team account access
+   until an authorised email is linked. See `IDENTITY_MIGRATION.md` for the rollout contract.
+   The local `identity.js` module and tests cover the core transition rules; backend and UI
+   integration are pending. Existing project sharing may also expose a task independently
+   of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without
    exposing hidden tasks.
