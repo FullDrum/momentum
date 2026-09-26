@@ -18,7 +18,7 @@ Momentum is Nikita's collaborative task and project outliner (Pacific/Auckland).
 - Each node has a `parentId`; sections and tasks share the same shape. The `nodes` array preserves tree order, and `order` is used when saving/reordering. `children()`, `descendants()`, and `ancestors()` in `app.js` navigate the tree.
 - Projects shows the tree. Today selects tasks scheduled for the local day, then shows their child subtree as a block even when a child has another date. All Tasks shows task subtrees grouped under the date of each displayed root task. Assigned to Me is a filtered view.
 - This is intentional: a child is normally a step of its parent and stays visible when the parent is the focus for Today. Choosing Today on a parent calls `setTaskToday()` and moves the whole subtree to today. Choosing Today on an individual child can surface that child separately.
-- In Today and All Tasks, Enter on a task makes a sibling after its subtree; Tab nests a task under a neighboring task; Shift+Tab moves it out. Drag and drop can reorder or nest. The related workflow tests are in `tests/tree.test.js`.
+- In Today and All Tasks, Enter on a task makes a sibling after its subtree; Tab nests a task under a neighboring task; Shift+Tab moves it out. Drag and drop can reorder or nest. Task rows with visible children have a toggle to open or close their subtree; collapse state is shared with Projects. The related workflow tests are in `tests/tree.test.js`.
 - Current implementation detail: Tab in Today/All Tasks aligns the indented task's date with its new parent. Enter on a top-level task in these views creates a sibling dated now; Enter on a child inherits its parent date. Keep these rules in mind when changing date or outline behavior.
 
 ## Sync and accounts

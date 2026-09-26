@@ -75,6 +75,44 @@ test('Today shows the whole subtree regardless of child date', () => {
   assert.ok(ids.includes('c2'), 'non-today child still appears under its parent');
 });
 
+for (const view of ['today', 'all']) {
+  test(`${view} collapses a task's whole block and reopens it in tree order`, () => {
+    const c = app();
+    c.activeTab = view;
+    c.hideDone = false;
+    c.collapsed = {};
+    c.nodes = [
+      node('p', 'Parent', null, '2026-09-19 10:00:00'),
+      node('c', 'Child on another day', 'p', '2026-09-20 10:00:00'),
+      node('g', 'Grandchild today', 'c', '2026-09-19 11:00:00')
+    ];
+    const ids = () => Array.from(c.visibleList(), r => r.node.id);
+    assert.deepEqual(ids(), ['p', 'c', 'g']);
+    assert.equal(c.visibleList()[0].hasVisibleChildren, true);
+    c.collapsed.p = true;
+    assert.deepEqual(ids(), ['p'], 'a matched grandchild must not escape a closed ancestor');
+    c.collapsed.p = false;
+    c.collapsed.c = true;
+    assert.deepEqual(ids(), ['p', 'c']);
+    c.collapsed.c = false;
+    assert.deepEqual(ids(), ['p', 'c', 'g']);
+  });
+}
+
+test('a watched child stays in its own list when an active parent is collapsed', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.hideDone = false;
+  c.showWatchedToday = true;
+  c.collapsed = { p: true };
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    { ...node('w', 'Watched child', 'p', '2026-09-19 10:00:00'), watching: true, done: true }
+  ];
+  assert.deepEqual(Array.from(c.visibleList(), r => ({ id: r.node.id, depth: r.depth })),
+    [{ id: 'p', depth: 0 }, { id: 'w', depth: 0 }]);
+});
+
 test('setTaskToday cascades today date to the whole subtree', () => {
   const c = app();
   c.nodes = [

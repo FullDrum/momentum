@@ -719,30 +719,42 @@ function visibleList() {
   var taskSet = new Set(tasks.map(n => n.id));
   var seen = new Set();
 
+  function visibleChild(c, parent) {
+    // Watched rows form a separate list in Today and All Tasks.
+    if ((activeTab === 'all' || activeTab === 'today') && c.watching !== parent.watching) return false;
+    return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId) && doneFilter(c);
+  }
+
+  function belongsUnderMatchedAncestor(n) {
+    var child = n;
+    var parent = n.parentId ? nodes.find(function(x) { return x.id === n.parentId; }) : null;
+    while (parent && visibleChild(child, parent)) {
+      if (taskSet.has(parent.id)) return true;
+      child = parent;
+      parent = parent.parentId ? nodes.find(function(x) { return x.id === parent.parentId; }) : null;
+    }
+    return false;
+  }
+
   function expandNode(n, depth) {
     if (seen.has(n.id)) return [];
     seen.add(n.id);
-    var result = [{ node: n, depth: depth, flat: true }];
-    children(n.id).filter(function(c) {
-      // Keep watched and active tasks in separate top-level lists in both
-      // All Tasks and Today.
-      if ((activeTab === 'all' || activeTab === 'today') && c.watching !== n.watching) return false;
-      return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId) && doneFilter(c);
-    }).forEach(function(c) {
-      result = result.concat(expandNode(c, depth + 1));
-    });
+    var visibleChildren = children(n.id).filter(function(c) { return visibleChild(c, n); });
+    var result = [{ node: n, depth: depth, flat: true, hasVisibleChildren: visibleChildren.length > 0 }];
+    if ((activeTab !== 'today' && activeTab !== 'all') || !collapsed[n.id]) {
+      visibleChildren.forEach(function(c) {
+        result = result.concat(expandNode(c, depth + 1));
+      });
+    }
     return result;
   }
 
   var expanded = [];
   tasks.forEach(function(n) {
     if (seen.has(n.id)) return; // already rendered as a child
-    // A node renders under its parent only when the parent is also a task in
-    // this view.
-    var parentTask = n.parentId ? nodes.find(function(x) { return x.id === n.parentId; }) : null;
-    var separateWatchList = (activeTab === 'all' || activeTab === 'today') &&
-      parentTask && n.watching !== parentTask.watching;
-    if (n.parentId && taskSet.has(n.parentId) && !separateWatchList) return;
+    // A matched descendant stays inside its matched ancestor's block, even
+    // when the ancestor is collapsed or an intermediate child has another date.
+    if (belongsUnderMatchedAncestor(n)) return;
     expanded = expanded.concat(expandNode(n, 0));
   });
   return expanded;
@@ -824,25 +836,25 @@ function render(preserveScroll) {
       var lbl = k === TODAY ? TODAYLABEL : k === 'watching' ? 'Watching' : k === 'undated' ? 'Undated'
         : new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
       return '<div class="section-label">' + lbl + '</div>' +
-        keyMap[k].map(function(item) { return rowHTML(item.node, item.depth, item.flat); }).join('');
+        keyMap[k].map(function(item) { return rowHTML(item.node, item.depth, item.flat, item.hasVisibleChildren); }).join('');
     }).join('');
   } else if (activeTab === 'today') {
     var todayItems = list.filter(function(item) { return !item.node.watching; });
     var watchedItems = list.filter(function(item) { return item.node.watching; });
     var html = `<div class="section-label">${TODAYLABEL}</div>`;
     if (todayItems.length) {
-      html += todayItems.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+      html += todayItems.map(({ node: n, depth, flat, hasVisibleChildren }) => rowHTML(n, depth, flat, hasVisibleChildren)).join('');
     } else {
       html += '<div class="empty" style="padding:18px 16px;">No active tasks for today.</div>';
     }
     html += `<div style="padding:10px 14px;"><button class="add-root-btn" onclick="addTodayTask()" style="font-size:12px;padding:6px 14px;">+ New task</button></div>`;
     if (showWatchedToday && watchedItems.length) {
       html += '<div class="section-label">Watching</div>' +
-        watchedItems.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+        watchedItems.map(({ node: n, depth, flat, hasVisibleChildren }) => rowHTML(n, depth, flat, hasVisibleChildren)).join('');
     }
     el.innerHTML = html;
   } else {
-    el.innerHTML = list.map(({ node: n, depth, flat }) => rowHTML(n, depth, flat)).join('');
+    el.innerHTML = list.map(({ node: n, depth, flat, hasVisibleChildren }) => rowHTML(n, depth, flat, hasVisibleChildren)).join('');
   }
 
   attachEvents();
@@ -973,7 +985,7 @@ function switchToDisplay(inp, displayEl) {
   displayEl.style.display = '';
 }
 
-function rowHTML(n, depth, flat = false) {
+function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
   var ch = children(n.id);
   var indentPx = 8 + depth * 22;
   // Build vertical indent guide lines — one per ancestor level
@@ -986,8 +998,8 @@ function rowHTML(n, depth, flat = false) {
     }
   }
   var leafSpan = flat ? '<span class="toggle leaf">◦</span>' : '<span class="toggle leaf zoomable" data-zoom="' + n.id + '" title="Zoom in">◦</span>';
-  var toggleEl = flat ? '<span class="toggle leaf">◦</span>'
-    : ch.length ? `<span class="toggle" data-toggle="${n.id}">${collapsed[n.id] ? '▶' : '▼'}</span>` + (!n.isSection && !flat ? '<span class="zoom-dot zoomable" data-zoom="' + n.id + '" title="Zoom in">◦</span>' : '')
+  var canToggle = flat ? (activeTab === 'today' || activeTab === 'all') && hasVisibleChildren : ch.length > 0;
+  var toggleEl = canToggle ? `<span class="toggle" data-toggle="${n.id}" role="button" tabindex="0" aria-label="${collapsed[n.id] ? 'Expand' : 'Collapse'} ${esc(n.name)}" aria-expanded="${!collapsed[n.id]}">${collapsed[n.id] ? '▶' : '▼'}</span>` + (!n.isSection && !flat ? '<span class="zoom-dot zoomable" data-zoom="' + n.id + '" title="Zoom in">◦</span>' : '')
     : leafSpan;
   var markerEl = n.isSection
     ? '<span class="section-icon" data-iconid="' + n.id + '"' + (!flat ? ' data-pickicon="' + n.id + '"' : '') + ' title="Click to change icon">' + renderSectionIcon(n.id, n.name) + '</span>'
@@ -1046,12 +1058,19 @@ function rowHTML(n, depth, flat = false) {
 
 function attachEvents() {
   var el = document.getElementById('treeEl');
-  el.querySelectorAll('[data-toggle]').forEach(b => b.onclick = e => {
-    e.stopPropagation();
-    pushUndo();
-    collapsed[b.dataset.toggle] = !collapsed[b.dataset.toggle];
-    saveCollapsed();
-    render(true);
+  el.querySelectorAll('[data-toggle]').forEach(b => {
+    b.onclick = e => {
+      e.stopPropagation();
+      pushUndo();
+      collapsed[b.dataset.toggle] = !collapsed[b.dataset.toggle];
+      saveCollapsed();
+      render(true);
+    };
+    b.onkeydown = e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      b.click();
+    };
   });
   el.querySelectorAll('.mobile-toggle').forEach(function(b) {
     b.onclick = function(e) {
