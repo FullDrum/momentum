@@ -772,6 +772,7 @@ function render(preserveScroll) {
   }
 
   suppressBlur = true; // prevent blur events from re-renders firing saves
+  var fid = focusId; // capture once: a blur/focus during the rebuild can mutate the global
   var list = visibleList();
 
   if (!list.length) {
@@ -850,10 +851,10 @@ function render(preserveScroll) {
   // Restore selection styles after DOM rebuild
   if (selectedIds.size > 0) updateSelectionStyles();
   setTimeout(() => { suppressBlur = false; }, 200); // re-enable blur after render settles
-  if (focusId) {
-    var inp = document.getElementById('inp_' + focusId);
-    var disp = document.getElementById('disp_' + focusId);
-    mlog('[MOM] render-focus id=', focusId, 'inp=', !!inp, 'disp=', !!disp);
+  if (fid) {
+    var inp = document.getElementById('inp_' + fid);
+    var disp = document.getElementById('disp_' + fid);
+    mlog('[MOM] render-focus id=', fid, 'inp=', !!inp, 'disp=', !!disp);
     if (inp) {
       switchToEdit(inp, disp);
       var l = inp.value.length;
