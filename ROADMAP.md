@@ -22,19 +22,16 @@ dependency order and split into backend prerequisites and later features.
 - **Collapse/expand toggles** in Today & All Tasks (collapse state shared with Projects).
 - **Service-worker auto-activation** so refreshes reliably pick up new builds.
 
-## Ready to commit and deploy
-
 - **Clearer sync warnings** — connection failures, access denial, HTTP errors,
   and missing acknowledgements now have distinct messages. Changes still stay
-  queued on the device for retry. Frontend tests pass; this change is not yet
-  committed or verified in production.
+  queued on the device for retry. Committed locally; production has not been
+  rechecked.
 
 ## Backend prerequisites (do before expanding collaboration)
 
-1. **Authorisation guards** — fix the source-review findings: the main request route does
-   not consistently validate the user allow-list; team-management and allow-list routes lack
-   a clear owner/admin guard; one validation path can fail open. Add isolated authorisation
-   tests. *(Needs `Code.gs` access.)*
+1. **Authorisation guards — deployed, further validation pending.** The main request route
+   now checks the allow-list, team and allow-list changes require the Sheet owner, and
+   lookup failures deny the request without clearing a valid client session.
 
    **26 September read-only check:** The current Apps Script editor still routes
    `getTeamMembers`, `saveTeamMember`, `deleteTeamMember`, `getWhitelist`, and
@@ -43,14 +40,14 @@ dependency order and split into backend prerequisites and later features.
    the submitted email when its Sheet/property lookup throws. The deployed version
    should be checked separately from editor source before release.
 
-   **Implementation plan:** Export `Code.gs` into a private, reviewable backend
-   workspace; make `validateUser` deny access on lookup errors; require allow-list
-   membership for every request; require the Sheet owner for team and allow-list
-   management routes. Keep ordinary task routes available to approved users and
-   preserve per-node ownership checks. Add tests for approved, unapproved, owner,
-   non-owner, expired-session, and lookup-failure cases. Test against a disposable
-   Sheet, then deploy a new Apps Script version and verify the live endpoint before
-   marking this item shipped.
+   **26 September progress:** `backend-auth.patch` records the change. Apps Script
+   version 294 is deployed to the same web-app endpoint. The draft passed syntax
+   and isolated tests for owner, approved member, outsider, management routes,
+   ownerless-node claiming, and unavailable Sheet/property lookups. The owner
+   account reloaded the live app and fetched tasks after deployment. The frontend
+   now waits for a successful server reply before adding a team member in the UI.
+   Before expanding collaboration, test with a disposable Sheet and a signed-in
+   non-owner account; those live cases have not yet been verified.
 
 ## Later features (dependency order)
 

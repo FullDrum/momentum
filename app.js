@@ -3535,9 +3535,17 @@ function showAddMemberForm(parentOverlay, onSave) {
     var name = form.querySelector('#newMemberName').value.trim();
     var email = form.querySelector('#newMemberEmail').value.trim().toLowerCase();
     if (!email || !email.includes('@')) { form.querySelector('#newMemberEmail').style.borderColor = 'var(--accent)'; form.querySelector('#newMemberEmail').focus(); return; }
-    form.remove();
-    gsr('saveTeamMember', { email: email, name: name }).catch(function(){});
-    onSave(email, name || email.split('@')[0]);
+    var button = form.querySelector('#saveMemberBtn');
+    button.disabled = true;
+    gsr('saveTeamMember', { email: email, name: name }).then(function(result) {
+      if (!result || result.ok !== true) throw new Error('Team member was not saved');
+      form.remove();
+      onSave(email, name || email.split('@')[0]);
+    }).catch(function(error) {
+      button.disabled = false;
+      var denied = /permission denied|unauthorized/i.test(String(error && error.message || ''));
+      showStatusBanner(denied ? 'Only the app owner can add team members.' : 'Could not add team member. Please retry.', 'error');
+    });
   };
 }
 

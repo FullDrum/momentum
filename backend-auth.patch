@@ -1,0 +1,53 @@
+--- a/Code.gs
++++ b/Code.gs
+@@ -5,6 +5,3 @@
+ function doGet(e) {
+-  return HtmlService.createHtmlOutputFromFile('Index')
+-    .setTitle('Momentum')
+-    .setSandboxMode(HtmlService.SandboxMode.IFRAME)
+-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
++  return ContentService.createTextOutput('Momentum API backend');
+ }
+@@ -18 +15 @@
+-    var user = googleUser || verifyMomentumSessionToken(body.sessionToken);
++    var user = validateUser(googleUser || verifyMomentumSessionToken(body.sessionToken));
+@@ -92,2 +89,6 @@
+ function routeFunction(fn, arg, user) {
++  var ownerOnly = ['saveTeamMember', 'deleteTeamMember', 'getWhitelist',
++    'addToWhitelist', 'claimOwnerlessNodes'];
++  if (ownerOnly.indexOf(fn) > -1 && user !== getOwnerEmail_())
++    return { error: 'Permission denied' };
+   switch (fn) {
+@@ -304,11 +305,20 @@
+-function validateUser(email) {
+-  if (!email || !email.trim()) return '';
+-  email = email.trim().toLowerCase();
++function getOwnerEmail_() {
+   try {
+-    var owner = SpreadsheetApp.openById(SHEET_ID).getOwner().getEmail().toLowerCase();
+-    if (email === owner) return email;
++    var owner = SpreadsheetApp.openById(SHEET_ID).getOwner();
++    var email = owner ? String(owner.getEmail() || '').trim().toLowerCase() : '';
++    if (!email) throw new Error('Owner unavailable');
++    return email;
++  } catch (e) { throw new Error('Authorization unavailable'); }
++}
++
++function validateUser(email) {
++  email = String(email || '').trim().toLowerCase();
++  if (!email) return '';
++  var owner = getOwnerEmail_();
++  if (email === owner) return email;
++  try {
+     var whitelist = PropertiesService.getScriptProperties().getProperty('whitelist') || '';
+-    var approved = whitelist.split(',').map(function(e){ return e.trim().toLowerCase(); }).filter(Boolean);
++    var approved = whitelist.split(',').map(function(e) { return e.trim().toLowerCase(); }).filter(Boolean);
+     return approved.indexOf(email) > -1 ? email : '';
+-  } catch(e) { return email; }
++  } catch (e) { throw new Error('Authorization unavailable'); }
+ }
+@@ -448,3 +458,3 @@
+   } else {
+-    if (!node.owner) node.owner = user;
++    node.owner = user;
+   }

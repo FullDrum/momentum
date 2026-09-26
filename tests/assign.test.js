@@ -52,6 +52,36 @@ function app(storage = new Map()) {
   return { c: context, login, setNow(ms) { now = ms; } };
 }
 
+test('adding a team member waits for server approval before using the person', async () => {
+  const a = app();
+  const fields = {
+    '#newMemberName': { value: 'Bob', style: {}, focus() {}, addEventListener() {} },
+    '#newMemberEmail': { value: 'bob@example.com', style: {}, focus() {}, addEventListener() {} },
+    '#saveMemberBtn': { disabled: false },
+    '.cancel-member-btn': {}
+  };
+  let removed = false;
+  const form = { style: {}, querySelector(selector) { return fields[selector]; }, remove() { removed = true; } };
+  const root = { style: {}, appendChild() {} };
+  a.c.document.createElement = () => form;
+  a.c.showStatusBanner = message => { a.c.lastMessage = message; };
+  let saved = false;
+  a.c.gsr = () => Promise.reject(new Error('Permission denied'));
+  a.c.showAddMemberForm({ querySelector() { return root; } }, () => { saved = true; });
+  fields['#saveMemberBtn'].onclick();
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(saved, false);
+  assert.equal(removed, false);
+  assert.equal(fields['#saveMemberBtn'].disabled, false);
+  assert.match(a.c.lastMessage, /only the app owner/i);
+
+  a.c.gsr = () => Promise.resolve({ ok: true });
+  fields['#saveMemberBtn'].onclick();
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(saved, true);
+  assert.equal(removed, true);
+});
+
 test('applyPicker with a null section clears the parent (No project)', () => {
   const a = app(); a.login();
   a.c.nodes = [
