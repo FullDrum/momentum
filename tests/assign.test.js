@@ -138,10 +138,12 @@ test('assignee-only assignment to no-one removes the old assignment share', () =
 test('reassignment removes the old assignee but keeps other shares', () => {
   const a = app(); a.login();
   const node = { id: 't1', name: 'Task', owner: 'alice@example.com',
-    assignedTo: 'bob@example.com', sharedWith: 'bob@example.com,lee@example.com' };
+    assignedTo: 'bob@example.com', assigneePersonId: 'old-person',
+    sharedWith: 'bob@example.com,lee@example.com' };
   a.c.nodes = [node];
   a.c.applyAssignment(node, 'pat@example.com');
   assert.equal(node.assignedTo, 'pat@example.com');
+  assert.equal(node.assigneePersonId, null);
   assert.equal(node.sharedWith, 'lee@example.com,pat@example.com');
 });
 

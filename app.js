@@ -1831,7 +1831,7 @@ function csvValue(value) {
 }
 
 function exportBackupCSV() {
-  var fields = ['id', 'name', 'parentId', 'isSection', 'done', 'watching', 'date', 'completedDate', 'owner', 'assignedTo', 'sharedWith', 'order'];
+  var fields = ['id', 'name', 'parentId', 'isSection', 'done', 'watching', 'date', 'completedDate', 'owner', 'assignedTo', 'assigneePersonId', 'sharedWith', 'order'];
   var rows = [fields.map(csvValue).join(',')];
   nodes.forEach(function(node) {
     rows.push(fields.map(function(field) { return csvValue(node[field]); }).join(','));
@@ -3552,6 +3552,8 @@ function showAddMemberForm(parentOverlay, onSave) {
 function applyAssignmentFields(node, email) {
   var previous = node.assignedTo;
   node.assignedTo = email || null;
+  // The email-only picker asks the backend to resolve the new person ID.
+  node.assigneePersonId = null;
   node.assignedBy = email ? (currentUser || '') : null;
   node.sharedWith = MomentumCore.replaceAssignmentShare(node.sharedWith, previous, email);
 }

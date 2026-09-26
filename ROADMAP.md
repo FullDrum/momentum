@@ -57,8 +57,9 @@ dependency order and split into backend prerequisites and later features.
    Name-only people are assignable immediately; the assignment grants no team account access
    until an authorised email is linked. See `IDENTITY_MIGRATION.md` for the rollout contract.
    The local `identity.js` module and tests cover the core transition rules; backend and UI
-   integration are pending. `backend/Code.gs` and `backend/People.gs` contain the tested
-   owner-only people API but are not installed in the live script. Existing project sharing may also expose a task independently
+   integration is in progress. `backend/Code.gs` and `backend/People.gs` now contain
+   local migration and assignment code, but are not installed in the live script.
+   The frontend still needs the name-only picker. Existing project sharing may also expose a task independently
    of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without

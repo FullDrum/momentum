@@ -1,6 +1,6 @@
 const SHEET_ID = '__CONFIGURE_SHEET_ID__';
 const SHEET_NAME = 'nodes';
-const COLS = ['id','name','parentId','isSection','done','date','order','owner','assignedTo','assignedBy','sharedWith','completedDate','watching'];
+const COLS = ['id','name','parentId','isSection','done','date','order','owner','assignedTo','assignedBy','sharedWith','completedDate','watching','assigneePersonId'];
 
 function doGet(e) {
   return ContentService.createTextOutput('Momentum API backend');
@@ -87,7 +87,8 @@ function verifyMomentumSessionToken(token) {
 }
 
 function routeFunction(fn, arg, user) {
-  var ownerOnly = ['saveTeamMember', 'deleteTeamMember', 'getPeople', 'savePerson', 'getWhitelist',
+  var ownerOnly = ['saveTeamMember', 'deleteTeamMember', 'getPeople', 'savePerson',
+    'previewPersonBackfill', 'migratePeople', 'getWhitelist',
     'addToWhitelist', 'claimOwnerlessNodes'];
   if (ownerOnly.indexOf(fn) > -1 && user !== getOwnerEmail_())
     return { error: 'Permission denied' };
@@ -95,8 +96,10 @@ function routeFunction(fn, arg, user) {
     case 'whoAmI':              return { email: user, effective: user };
     case 'getInitialData':      return getInitialData_pwa(user);
     case 'getTeamMembers':      return getTeamMembers();
-    case 'getPeople':           return getPeople(user);
-    case 'savePerson':          return savePerson(arg, user);
+    case 'getPeople':           return getPeople_(user);
+    case 'savePerson':          return savePerson_(arg, user);
+    case 'previewPersonBackfill': return previewPersonBackfill_(user);
+    case 'migratePeople':       return migratePeople_(user);
     case 'saveTeamMember':      return saveTeamMember(arg);
     case 'deleteTeamMember':    return deleteTeamMember(arg);
     case 'saveNodeServer':      return saveNodeServer_pwa(arg, user);
@@ -139,7 +142,6 @@ function batchOps(payload, user) {
   saves.forEach(function(node) {
     if (!node || !node.id) { saveResults.push({ id: (node && node.id) || null, error: 'No id' }); return; }
     try {
-      COLS.forEach(function(c) { if (!(c in node)) node[c] = null; });
       node.isSection = node.isSection === true || node.isSection === 'true' || node.isSection === 'TRUE';
       node.done = node.done === true || node.done === 'true' || node.done === 'TRUE';
       node.watching = node.watching === true || node.watching === 'true' || node.watching === 'TRUE';
@@ -162,7 +164,6 @@ function getInitialData_pwa(user) {
 
 function saveNodeServer_pwa(node, user) {
   if (!node) return { error: 'No node received' };
-  COLS.forEach(function(c) { if (!(c in node)) node[c] = null; });
   node.isSection = node.isSection === true || node.isSection === 'true' || node.isSection === 'TRUE';
   node.done = node.done === true || node.done === 'true' || node.done === 'TRUE';
   node.watching = node.watching === true || node.watching === 'true' || node.watching === 'TRUE';
@@ -378,8 +379,11 @@ function getSheet() {
 function getAllRows() {
   var sheet = getSheet();
   var data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
+  if (!data.length) throw new Error('Nodes sheet has no header row');
   var headers = data[0];
+  if (headers.slice(0, COLS.length).join('|') !== COLS.join('|'))
+    throw new Error('Nodes sheet headers do not match backend schema');
+  if (data.length < 2) return [];
   return data.slice(1).map(function(row) {
     var obj = {};
     headers.forEach(function(h, i) {
@@ -456,10 +460,13 @@ function saveNode(node, user) {
     var isOwner = existingOwner === '' || existingOwner === user;
     var isAssignee = existing.assignedTo === user;
     if (!isOwner && !isAssignee) return { error: 'Permission denied' };
-    if (!isOwner) { node.owner=existing.owner; node.sharedWith=existing.sharedWith; node.assignedBy=existing.assignedBy; }
+    if (!isOwner) { node.owner=existing.owner; node.sharedWith=existing.sharedWith; node.assignedBy=existing.assignedBy;
+      node.assignedTo=existing.assignedTo; node.assigneePersonId=existing.assigneePersonId; }
   } else {
     node.owner = user;
   }
+  var assignment = resolveNodeAssignment_(node, existing, user);
+  if (assignment && assignment.error) return assignment;
   var row = COLS.map(function(c){
     if (c==='isSection'||c==='done'||c==='watching') return node[c]?'TRUE':'FALSE';
     if (c==='date'){

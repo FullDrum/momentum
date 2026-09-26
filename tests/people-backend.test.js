@@ -26,7 +26,8 @@ function backend() {
     }; } },
     LockService: { getScriptLock() { return { waitLock() {}, releaseLock() {} }; } },
     Utilities: { getUuid() { return `person-${++nextId}`; } },
-    getOwnerEmail_() { return 'owner@example.com'; }
+    getOwnerEmail_() { return 'owner@example.com'; },
+    getSheet() { return { getDataRange() { return { getValues() { return [['id']]; } }; } }; }
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../backend/People.gs'), 'utf8'), context);
   return { context, rows: () => peopleRows };
@@ -34,9 +35,9 @@ function backend() {
 
 test('only the owner can create a provisional person', () => {
   const b = backend();
-  assert.equal(b.context.savePerson({ name: 'Pat' }, 'outsider@example.com').error, 'Permission denied');
+  assert.equal(b.context.savePerson_({ name: 'Pat' }, 'outsider@example.com').error, 'Permission denied');
   assert.equal(b.rows(), null);
-  const result = b.context.savePerson({ name: 'Pat' }, 'owner@example.com');
+  const result = b.context.savePerson_({ name: 'Pat' }, 'owner@example.com');
   assert.equal(result.person.personId, 'person-1');
   assert.equal(result.person.status, 'provisional');
   assert.equal(result.person.email, '');
@@ -44,12 +45,12 @@ test('only the owner can create a provisional person', () => {
 
 test('adding an email keeps the ID and rejects duplicate links', () => {
   const b = backend();
-  const first = b.context.savePerson({ name: 'Pat' }, 'owner@example.com').person;
-  const second = b.context.savePerson({ name: 'Lee', email: 'lee@example.com' }, 'owner@example.com').person;
-  const linked = b.context.savePerson({ personId: first.personId, name: 'Pat', email: ' PAT@Example.com ' }, 'owner@example.com');
+  const first = b.context.savePerson_({ name: 'Pat' }, 'owner@example.com').person;
+  const second = b.context.savePerson_({ name: 'Lee', email: 'lee@example.com' }, 'owner@example.com').person;
+  const linked = b.context.savePerson_({ personId: first.personId, name: 'Pat', email: ' PAT@Example.com ' }, 'owner@example.com');
   assert.equal(linked.person.personId, first.personId);
   assert.equal(linked.person.email, 'pat@example.com');
-  assert.equal(b.context.savePerson({ personId: first.personId, name: 'Pat', email: second.email }, 'owner@example.com').error,
+  assert.equal(b.context.savePerson_({ personId: first.personId, name: 'Pat', email: second.email }, 'owner@example.com').error,
     'Email already linked to another person');
   assert.equal(b.rows().length, 3);
 });

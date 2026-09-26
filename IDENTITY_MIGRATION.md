@@ -40,6 +40,9 @@ any of those email fields or used as an access grant.
    unique legacy assignee email, reusing an existing team entry where possible.
    Normalise emails for matching, but keep the stored `assignedTo` unchanged until
    each row is linked. Log duplicate/conflicting email rows for manual resolution.
+   The owner has reported making a Sheet backup, adding the `people` headers, and
+   adding `assigneePersonId` after `watching`; the live header order is not yet
+   independently verified.
 3. Deploy server reads that return both fields and server writes that accept either
    a legacy email or a person ID. Derive `assignedTo` on the server
    from the person record. Remove the prior assignment's legacy share when changing
@@ -63,8 +66,10 @@ The pure rules for person creation, email linking, legacy backfill planning, and
 assignment-field transitions now live in `identity.js` with local tests. They are
 not yet wired into the frontend or the Apps Script backend.
 
-`backend/People.gs` is the tested Apps Script people-table implementation.
-`backend/Code.gs` routes `getPeople` and `savePerson` with owner-only checks. Both
-files are local source only; neither is deployed. Test them against a disposable
-Sheet before deployment. They do not yet backfill existing assignments or add
-`assigneePersonId` to the nodes Sheet.
+`backend/People.gs` now contains the tested people-table functions, owner-only
+backfill preview and migration, and server-side assignment resolution.
+`backend/Code.gs` routes these functions and includes `assigneePersonId` after
+`watching` in the node schema. The current email picker clears a stale person ID
+when an assignment changes; backup restore preserves person IDs. These changes
+are local only. They have not been tested against a disposable Sheet or deployed,
+and the frontend cannot yet select a provisional person by name.

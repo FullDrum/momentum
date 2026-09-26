@@ -146,6 +146,7 @@
         order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : Date.now(),
         owner: raw.owner ? String(raw.owner) : currentUser,
         assignedTo: raw.assignedTo ? String(raw.assignedTo) : null,
+        assigneePersonId: raw.assigneePersonId ? String(raw.assigneePersonId) : null,
         assignedBy: raw.assignedBy ? String(raw.assignedBy) : null,
         sharedWith: raw.sharedWith ? String(raw.sharedWith) : ''
       };
