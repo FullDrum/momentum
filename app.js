@@ -1413,11 +1413,22 @@ function handleKey(e, inp) {
     if (cur.name.trim()) {
       scheduleSave(cur);
     }
-    var currentDepth = vi > -1 ? (list[vi].depth || 0) : 0;
+    var parentNode = cur.parentId ? nodes.find(function(x) { return x.id === cur.parentId; }) : null;
+    var parentIsTask = parentNode && !parentNode.isSection;
     var newParentId;
     var nn;
-    if (currentDepth === 0) {
-      // Root flat node — new task with today's date under the picked section
+    if (parentIsTask) {
+      // Sibling in the same parent (a task), inheriting its date so it stays grouped.
+      newParentId = cur.parentId;
+      nn = {
+        id: newId(), name: '',
+        parentId: newParentId,
+        isSection: false, done: false,
+        date: cur.date || null,
+        owner: currentUser
+      };
+    } else {
+      // New top-level task under the current section (or root).
       newParentId = defaultParentForNewTask(cur.parentId);
       nn = {
         id: newId(), name: '',
@@ -1427,16 +1438,6 @@ function handleKey(e, inp) {
         owner: currentUser,
         assignedTo: lastPickedAssignee || null,
         assignedBy: lastPickedAssignee ? (currentUser || '') : null
-      };
-    } else {
-      // Child node — sibling in the same parent, inherits date so it stays visible
-      newParentId = cur.parentId || null;
-      nn = {
-        id: newId(), name: '',
-        parentId: newParentId,
-        isSection: false, done: false,
-        date: cur.date || null,
-        owner: currentUser
       };
     }
     var insertAt = topOfSiblingsIndex(newParentId);
@@ -1559,6 +1560,14 @@ function handleKey(e, inp) {
     for (var i = vi - 1; i >= 0; i--) {
       if (list[i].depth === curDepth) { target = list[i].node; break; }
       if (list[i].depth < curDepth) break;
+    }
+    // No sibling above (e.g. a task just created above its parent) — indent
+    // under the next sibling below instead.
+    if (!target) {
+      for (var i2 = vi + 1; i2 < list.length; i2++) {
+        if (list[i2].depth === curDepth) { target = list[i2].node; break; }
+        if (list[i2].depth < curDepth) break;
+      }
     }
     if (!target) return;
     // In date-grouped views, only nest within the same date group so the child

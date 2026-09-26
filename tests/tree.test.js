@@ -178,3 +178,21 @@ test('Enter in a child inserts a new sibling at the top of the same parent', () 
   assert.equal(c.nodes[2].id, 'c');
   assert.equal(c.focusId, c.nodes[1].id, 'new task is focused');
 });
+
+test('Enter on a differently-dated child still creates a sibling in the same parent', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    node('c', 'Older child', 'p', '2026-09-20 10:00:00') // different date -> rendered top-level
+  ];
+  const inp = { dataset: { id: 'c', flat: 'true' }, value: 'Older child' };
+  const e = { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} };
+  c.handleKey(e, inp);
+  const nn = c.nodes.find(n => n.id !== 'p' && n.id !== 'c');
+  assert.ok(nn, 'a new node was created');
+  assert.equal(nn.parentId, 'p', 'new node is a sibling in the same parent, not a root');
+});
