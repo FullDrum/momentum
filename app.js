@@ -302,6 +302,22 @@ function updateQueueBanner() {
   }
 }
 
+function syncFailureMessage(error) {
+  var detail = String(error && error.message || '');
+  var lead = 'Changes remain on this device and will retry. ';
+  if (/failed to fetch|networkerror|network request failed/i.test(detail))
+    return lead + 'The app could not reach the sync server. Check your connection.';
+  if (/^(unauthorized|not authenticated)$/i.test(detail))
+    return lead + 'Your sign-in needs to be renewed.';
+  if (error && error.code === 'ACCESS_DENIED')
+    return lead + 'The server denied access to at least one change.';
+  if (/^HTTP \d{3}$/.test(detail))
+    return lead + 'The sync server returned ' + detail + '.';
+  if (/acknowledg/i.test(detail))
+    return lead + 'The server did not confirm every change.';
+  return lead + 'The sync server reported an error. Retry or check the browser console.';
+}
+
 // Flush the current queue as one batched request.
 // Never run two batches concurrently; ordering is essential for edits and deletes.
 function flushBatch(force) {
@@ -325,7 +341,13 @@ function flushBatch(force) {
       if (thisGen !== batchGeneration) return;
       var resultErrors = MomentumCore.acknowledgeBatch(queueState, snapSaves, snapDeletes, resp);
       persistQueue();
-      if (resultErrors) throw new Error('Some changes were not acknowledged or permission was denied');
+      if (resultErrors) {
+        var failedItems = resp.results.saves.concat(resp.results.deletes).filter(function(r) { return r && r.error; });
+        var denied = failedItems.some(function(r) { return /permission|access|forbidden/i.test(String(r.error)); });
+        var failure = new Error('Some changes were not acknowledged');
+        if (denied) failure.code = 'ACCESS_DENIED';
+        throw failure;
+      }
       batchBackoffMs = BACKOFF_BASE_MS;
       setSyncDot('ok');
       if (queueIsEmpty()) markLastSync();
@@ -336,7 +358,7 @@ function flushBatch(force) {
       // saves/deletes, including edits made while this request was in flight.
       console.error('Batch failed:', e && e.message);
       setSyncDot('err');
-      showStatusBanner('Some changes could not sync. They remain on this device. Check your connection or access and retry.', 'error', 'Retry', function() { flushBatch(true); });
+      showStatusBanner(syncFailureMessage(e), 'error', 'Retry', function() { flushBatch(true); });
       batchBackoffMs = Math.min(batchBackoffMs * 2, BACKOFF_MAX_MS);
     })
     .finally(function() {

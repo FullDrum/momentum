@@ -66,6 +66,22 @@ function deferred() {
 }
 const ack = (saves = [], deletes = []) => ({ results: { saves: saves.map(id => ({ id, ok: true })), deletes: deletes.map(id => ({ id, ok: true })) } });
 
+test('sync warning distinguishes a connection failure from a denied save', async () => {
+  const offline = app(); offline.login();
+  offline.c.gsr = () => Promise.reject(new TypeError('Failed to fetch'));
+  offline.c.queueSave({ id: 'a', name: 'Keep locally' });
+  await offline.c.flushBatch();
+  assert.match(offline.c.lastMessage, /could not reach the sync server/i);
+  assert.equal(offline.c.queueState.saves.a.name, 'Keep locally');
+
+  const denied = app(); denied.login();
+  denied.c.gsr = () => Promise.resolve({ results: { saves: [{ id: 'a', error: 'Permission denied' }], deletes: [] } });
+  denied.c.queueSave({ id: 'a', name: 'Keep locally' });
+  await denied.c.flushBatch();
+  assert.match(denied.c.lastMessage, /denied access/i);
+  assert.equal(denied.c.queueState.saves.a.name, 'Keep locally');
+});
+
 test('closing during a save preserves the durable operation and reload overlays it onto server data', async () => {
   const a = app(); a.login();
   const request = deferred(); a.c.gsr = () => request.promise;
