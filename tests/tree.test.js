@@ -291,3 +291,25 @@ test('Enter on an older child aligns the new sibling to the parent date', () => 
   assert.equal(nn.parentId, 'p', 'new node is a sibling under the parent');
   assert.equal(nn.date.slice(0, 10), '2026-09-19', 'sibling date aligned to the parent date');
 });
+
+test('addTodayTask creates a new empty task at the top and focuses it', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.lastPickedSection = undefined;
+  c.nodes = [ node('p', 'Parent', null, '2026-09-19 10:00:00') ];
+  c.addTodayTask();
+  assert.equal(c.nodes.length, 2);
+  const nn = c.nodes.find(n => n.id !== 'p');
+  assert.ok(nn, 'new node created');
+  assert.equal(c.nodes[0].id, nn.id, 'new node is at the top');
+  assert.equal(nn.date.slice(0, 10), '2026-09-19', 'new node is dated today');
+  assert.equal(c.focusId, nn.id, 'new node is focused');
+});
+
+test('structure: global Enter creates a new task when not editing', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+  assert.match(src, /e\.key === 'Enter' && !inInput/, 'global Enter handler exists');
+});

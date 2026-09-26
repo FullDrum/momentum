@@ -1664,13 +1664,17 @@ function addRoot() {
 
 function addTodayTask() {
   pushUndo();
+  var parentId = defaultParentForNewTask(null);
   var n = {
-    id: newId(), name: '', parentId: defaultParentForNewTask(null),
+    id: newId(), name: '', parentId: parentId,
     isSection: false, done: false,
     date: localDateTime(), owner: currentUser,
-    order: Date.now()
+    assignedTo: lastPickedAssignee || null,
+    assignedBy: lastPickedAssignee ? (currentUser || '') : null
   };
-  nodes.push(n);
+  var insertAt = topOfSiblingsIndex(parentId);
+  n.order = orderBetween(insertAt - 1, insertAt);
+  nodes.splice(insertAt, 0, n);
   focusId = n.id;
   render();
 }
@@ -4435,6 +4439,12 @@ attachEvents = function() {
 
 document.addEventListener('keydown', function(e) {
   var inInput = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+  // Enter (not editing a task): create a new task and focus it
+  if (e.key === 'Enter' && !inInput && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    addTodayTask();
+    return;
+  }
   // Ctrl+Shift+F or / (not in input): open search
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
     e.preventDefault();
