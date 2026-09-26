@@ -58,8 +58,8 @@ dependency order and split into backend prerequisites and later features.
    until an authorised email is linked. See `IDENTITY_MIGRATION.md` for the rollout contract.
    The local `identity.js` module and tests cover the core transition rules; backend and UI
    integration is in progress. `backend/Code.gs` and `backend/People.gs` now contain
-   local migration and assignment code, but are not installed in the live script.
-   The frontend still needs the name-only picker. Existing project sharing may also expose a task independently
+   local migration and assignment code, and `app.js` has a local name-only picker and
+   email-linking form. They are not installed in the live app. Existing project sharing may also expose a task independently
    of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without

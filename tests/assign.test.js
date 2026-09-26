@@ -52,7 +52,7 @@ function app(storage = new Map()) {
   return { c: context, login, setNow(ms) { now = ms; } };
 }
 
-test('adding a team member waits for server approval before using the person', async () => {
+test('adding a person waits for server approval before using the person', async () => {
   const a = app();
   const fields = {
     '#newMemberName': { value: 'Bob', style: {}, focus() {}, addEventListener() {} },
@@ -69,17 +69,70 @@ test('adding a team member waits for server approval before using the person', a
   a.c.gsr = () => Promise.reject(new Error('Permission denied'));
   a.c.showAddMemberForm({ querySelector() { return root; } }, () => { saved = true; });
   fields['#saveMemberBtn'].onclick();
-  await Promise.resolve(); await Promise.resolve();
+  await new Promise(setImmediate);
   assert.equal(saved, false);
   assert.equal(removed, false);
   assert.equal(fields['#saveMemberBtn'].disabled, false);
   assert.match(a.c.lastMessage, /only the app owner/i);
 
-  a.c.gsr = () => Promise.resolve({ ok: true });
+  a.c.gsr = () => Promise.resolve({ ok: true, person: { personId: 'person-1', name: 'Bob', email: 'bob@example.com' } });
   fields['#saveMemberBtn'].onclick();
-  await Promise.resolve(); await Promise.resolve();
+  await new Promise(setImmediate);
   assert.equal(saved, true);
   assert.equal(removed, true);
+});
+
+test('creating a name-only person sends no email and uses the returned person ID', async () => {
+  const a = app();
+  const fields = {
+    '#newMemberName': { value: 'Pat', style: {}, focus() {}, addEventListener() {} },
+    '#newMemberEmail': { value: '', style: {}, focus() {}, addEventListener() {} },
+    '#saveMemberBtn': { disabled: false },
+    '.cancel-member-btn': {}
+  };
+  const form = { style: {}, querySelector(selector) { return fields[selector]; }, remove() {} };
+  a.c.document.createElement = () => form;
+  let call;
+  let saved;
+  a.c.gsr = (fn, body) => {
+    call = { fn, body };
+    return Promise.resolve({ ok: true, person: { personId: 'person-pat', name: 'Pat', email: '' } });
+  };
+  a.c.showAddMemberForm({ querySelector() { return { style: {}, appendChild() {} }; } }, person => { saved = person; });
+  fields['#saveMemberBtn'].onclick();
+  await new Promise(setImmediate);
+  assert.equal(call.fn, 'savePerson');
+  assert.equal(call.body.email, '');
+  assert.equal(saved.personId, 'person-pat');
+});
+
+test('person ID assignment retains identity while removing the old email share', () => {
+  const a = app(); a.login();
+  a.c.teamMembers = [{ personId: 'person-pat', name: 'Pat', email: '' }];
+  const node = { id: 't1', name: 'Task', owner: 'alice@example.com',
+    assignedTo: 'bob@example.com', sharedWith: 'bob@example.com,lee@example.com' };
+  a.c.nodes = [node];
+  a.c.applyAssignment(node, 'person-pat');
+  assert.equal(node.assigneePersonId, 'person-pat');
+  assert.equal(node.assignedTo, null);
+  assert.equal(node.sharedWith, 'lee@example.com');
+  assert.equal(a.c.getMemberName('person-pat'), 'Pat');
+});
+
+test('linking an email to a person keeps one picker choice and uses the linked email', () => {
+  const a = app(); a.login();
+  a.c.teamMembers = a.c.mergeAssigneeSources(
+    [{ personId: 'person-pat', name: 'Pat', email: 'pat@example.com' }],
+    [{ name: 'Pat', email: 'pat@example.com' }]);
+  const choices = a.c.getSortedAssignees();
+  assert.equal(choices.length, 1);
+  assert.equal(choices[0].key, 'person-pat');
+  const node = { id: 't1', name: 'Task', owner: 'alice@example.com', sharedWith: '' };
+  a.c.nodes = [node];
+  a.c.applyAssignment(node, 'person-pat');
+  assert.equal(node.assigneePersonId, 'person-pat');
+  assert.equal(node.assignedTo, 'pat@example.com');
+  assert.equal(node.sharedWith, 'pat@example.com');
 });
 
 test('applyPicker with a null section clears the parent (No project)', () => {

@@ -63,13 +63,13 @@ still has email fields and no `assigneePersonId`. This document does not itself
 change the running app or its access rules.
 
 The pure rules for person creation, email linking, legacy backfill planning, and
-assignment-field transitions now live in `identity.js` with local tests. They are
-not yet wired into the frontend or the Apps Script backend.
+assignment-field transitions now live in `identity.js` with local tests.
 
 `backend/People.gs` now contains the tested people-table functions, owner-only
 backfill preview and migration, and server-side assignment resolution.
 `backend/Code.gs` routes these functions and includes `assigneePersonId` after
-`watching` in the node schema. The current email picker clears a stale person ID
-when an assignment changes; backup restore preserves person IDs. These changes
-are local only. They have not been tested against a disposable Sheet or deployed,
-and the frontend cannot yet select a provisional person by name.
+`watching` in the node schema. The local frontend picker selects people by ID,
+allows name-only creation, and links an email later; backup restore preserves
+person IDs. These changes are local only. They have not been tested against a
+disposable Sheet or deployed. Deploy backend and frontend together after that
+validation; the live email-based backend cannot save a name-only assignment.

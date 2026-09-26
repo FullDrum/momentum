@@ -424,9 +424,13 @@ async function fetchAll(initial) {
   }
 
   var serverNodes = MomentumCore.overlayQueue(normalizeNodes(data.nodes || []), queueState);
-  gsr('getTeamMembers').then(function(members) {
-    if (fetchingOwner === queueOwner) teamMembers = members || [];
-  }).catch(function(){});
+  Promise.allSettled([gsr('getPeople'), gsr('getTeamMembers')]).then(function(results) {
+    if (fetchingOwner !== queueOwner) return;
+    var people = results[0].status === 'fulfilled' && results[0].value &&
+      Array.isArray(results[0].value.people) ? results[0].value.people : [];
+    var members = results[1].status === 'fulfilled' && Array.isArray(results[1].value) ? results[1].value : [];
+    teamMembers = mergeAssigneeSources(people, members);
+  });
 
   if (initial) {
     // Fresh boot — no local state worth preserving. Just load server state.
@@ -1042,13 +1046,13 @@ function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
     if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
     var nd = n.date ? n.date.slice(0,10) : null;
     var isToday = nd === TODAY;
-    if (n.assignedTo && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assignedTo))}</span>`;
+    if ((n.assigneePersonId || n.assignedTo) && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assigneePersonId || n.assignedTo))}</span>`;
     else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
     meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
     var isToday2 = nd2 === TODAY;
-    if (n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assignedTo))}</span>`;
+    if (n.assigneePersonId || n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assigneePersonId || n.assignedTo))}</span>`;
     meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>' + meta;
   }
   if (n.watching) meta = '<span class="watch-badge" title="Done &amp; watching">👁</span>' + meta;
@@ -1423,7 +1427,7 @@ function handleKey(e, inp) {
     }
     openPeopleChooser({
       title: 'Assign "' + cur.name + '"',
-      selected: cur.assignedTo || null,
+      selected: cur.assigneePersonId || cur.assignedTo || null,
       onConfirm: function(email) { applyAssignment(cur, email); }
     });
     return;
@@ -1480,9 +1484,10 @@ function handleKey(e, inp) {
         isSection: false, done: false,
         date: localDateTime(),
         owner: currentUser,
-        assignedTo: lastPickedAssignee || null,
-        assignedBy: lastPickedAssignee ? (currentUser || '') : null
+        assignedTo: null,
+        assignedBy: null
       };
+      if (lastPickedAssignee) applyAssignmentFields(nn, lastPickedAssignee);
     }
     // Insert directly below the current node (after its subtree), so siblings
     // stack downward.
@@ -1946,7 +1951,7 @@ function showAssign(id) {
   var n = nodes.find(function(x) { return x.id === id; }); if (!n) return;
   openPeopleChooser({
     title: 'Assign "' + n.name + '"',
-    selected: n.assignedTo || null,
+    selected: n.assigneePersonId || n.assignedTo || null,
     onConfirm: function(email) { applyAssignment(n, email); }
   });
 }
@@ -1968,7 +1973,7 @@ function bulkAssign() {
       ids.forEach(function(id) {
         var n = nodes.find(function(x) { return x.id === id; });
         if (!n || !canEdit(n)) return;
-        applyAssignmentFields(n, email);
+        if (!applyAssignmentFields(n, email)) return;
         scheduleSave(n);
       });
       clearSelection();
@@ -1982,7 +1987,7 @@ var ADD_NEW_SENTINEL = '__add_new__';
 
 function openPeopleChooser(opts) {
   opts = opts || {};
-  var selected = opts.selected || null; // email, or null = no assignee
+  var selected = opts.selected || null; // person ID or legacy email
   var query = '';
   var hi = selected; // highlighted email (''/null = no assignee), or ADD_NEW_SENTINEL
 
@@ -2006,7 +2011,7 @@ function openPeopleChooser(opts) {
     if (!query) return users;
     var q = query.toLowerCase();
     return users.filter(function(u) {
-      var email = (u.email || u).toLowerCase();
+      var email = String(u.email || '').toLowerCase();
       var name = (u.name || '').toLowerCase();
       return email.indexOf(q) > -1 || name.indexOf(q) > -1;
     });
@@ -2017,17 +2022,19 @@ function openPeopleChooser(opts) {
     var html = '<div class="pc-row" data-email="" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--text3);' +
       (hi === null ? 'background:var(--accent);color:var(--bg);' : '') + '">No assignee</div>';
     users.forEach(function(u) {
-      var email = u.email || u;
-      var name = u.name || email.split('@')[0];
-      var isHi = (hi || '').toLowerCase() === email.toLowerCase();
+      var email = u.email || '';
+      var key = u.key;
+      var name = u.name;
+      var isHi = (hi || '').toLowerCase() === key.toLowerCase();
       var isMe = email.toLowerCase() === (currentUser || '').toLowerCase();
-      var star = MomentumCore.favouriteCount(assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
+      var star = MomentumCore.favouriteCount(assigneeFavourites[key.toLowerCase()] || assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
       var bg = isHi ? 'background:var(--accent);color:var(--bg);' : '';
       var dim = isHi ? 'color:rgba(255,255,255,0.6);' : 'color:var(--text3);';
-      html += '<div class="pc-row" data-email="' + esc(email) + '" style="padding:6px 16px;cursor:pointer;font-size:13px;' + bg + '">' +
+      html += '<div class="pc-row" data-email="' + esc(key) + '" style="padding:6px 16px;cursor:pointer;font-size:13px;' + bg + '">' +
         '<span style="font-size:9px;color:' + (isHi ? 'var(--bg)' : 'var(--accent)') + ';">' + star + '</span>' +
         esc(name) + (isMe ? ' <span style="font-size:10px;opacity:0.5">(me)</span>' : '') +
-        ' <span style="font-size:10px;' + dim + '">' + esc(email) + '</span></div>';
+        ' <span style="font-size:10px;' + dim + '">' + esc(email || 'email not linked') + '</span>' +
+        (!email && u.personId ? ' <button type="button" class="pc-link-email" data-person="' + esc(key) + '">Add email</button>' : '') + '</div>';
     });
     html += '<div class="pc-new" style="padding:6px 16px;cursor:pointer;font-size:13px;color:var(--accent);' +
       (hi === ADD_NEW_SENTINEL ? 'background:var(--accent);color:var(--bg);' : '') +
@@ -2044,11 +2051,21 @@ function openPeopleChooser(opts) {
         renderList();
       };
     });
+    overlay.querySelectorAll('.pc-link-email').forEach(function(button) {
+      button.onclick = function(e) {
+        e.stopPropagation();
+        var person = teamMembers.find(function(m) { return m.personId === button.dataset.person; });
+        if (person) showAddMemberForm(overlay, function(saved) {
+          updateLinkedPerson(saved);
+          renderList();
+        }, person);
+      };
+    });
     var newBtn = overlay.querySelector('.pc-new');
     if (newBtn) newBtn.onclick = function() {
-      showAddMemberForm(overlay, function(email, name) {
-        teamMembers.push({ email: email, name: name });
-        hi = email;
+      showAddMemberForm(overlay, function(person) {
+        teamMembers.push(person);
+        hi = assigneeKey(person);
         renderList();
       });
     };
@@ -2082,7 +2099,7 @@ function openPeopleChooser(opts) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       var items = ['']; // '' = no assignee
-      filtered().forEach(function(u) { items.push(u.email || u); });
+      filtered().forEach(function(u) { items.push(u.key); });
       items.push(ADD_NEW_SENTINEL);
       var idx = items.indexOf(hi === null ? '' : hi);
       var next = e.key === 'ArrowDown' ? Math.min(items.length - 1, idx + 1) : Math.max(0, idx - 1);
@@ -2247,7 +2264,7 @@ var selectionMode = false; // true when mobile selection mode is active
 var zoomedId = null; // node currently zoomed into
 var lastPickedSection = undefined; // undefined=never picked, null=explicit "No project", else section id
 var teamMembers = []; // cached from sheet: [{email, name}]
-var lastPickedAssignee = null; // last used assignee email from picker
+var lastPickedAssignee = null; // last used person ID, or legacy email
 var sectionFavourites = JSON.parse(localStorage.getItem('momentum_sec_favs') || '{}');
 var assigneeFavourites = JSON.parse(localStorage.getItem('momentum_asg_favs') || '{}');
 var navHistory = []; // stack of {tab, zoomedId} states
@@ -2709,7 +2726,7 @@ function searchRowHTML(n) {
 
   var meta = '';
   if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + bcHtml + '</span>';
-  if (n.assignedTo && n.assignedTo !== currentUser) meta += '<span class="assignee-badge">' + esc(getMemberName(n.assignedTo)) + '</span>';
+  if ((n.assigneePersonId || n.assignedTo) && n.assignedTo !== currentUser) meta += '<span class="assignee-badge">' + esc(getMemberName(n.assigneePersonId || n.assignedTo)) + '</span>';
   meta += '<span class="today-badge' + (nd === TODAY ? ' is-today' : '') + '">' + (nd === TODAY ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
 
   var acts = '';
@@ -3037,10 +3054,13 @@ function showDeleteConfirm(message, onConfirm) {
   overlay.querySelector('#delConfirm').focus();
 }
 
-function getMemberName(email) {
-  if (!email) return '';
-  var member = teamMembers.find(function(m) { return m.email.toLowerCase() === email.toLowerCase(); });
-  return member && member.name ? member.name : email.split('@')[0];
+function getMemberName(reference) {
+  if (!reference) return '';
+  var key = String(reference).toLowerCase();
+  var member = teamMembers.find(function(m) {
+    return String(m.personId || '').toLowerCase() === key || String(m.email || '').toLowerCase() === key;
+  });
+  return member && member.name ? member.name : (key.includes('@') ? key.split('@')[0] : 'Assigned person');
 }
 
 function orderBetween(beforeIdx, afterIdx) {
@@ -3163,23 +3183,52 @@ function getSortedSections(parentId, depth) {
   return result;
 }
 
-function getSortedAssignees() {
-  // Merge team members from sheet with any found in nodes
-  var userSet = {};
-  // From sheet (authoritative)
-  teamMembers.forEach(function(m) {
-    userSet[m.email.toLowerCase()] = { email: m.email, name: m.name || m.email.split('@')[0] };
+function mergeAssigneeSources(people, members) {
+  var byEmail = {};
+  var result = [];
+  (people || []).forEach(function(p) {
+    if (!p.personId || !p.name) return;
+    var person = { personId: String(p.personId), name: String(p.name), email: String(p.email || '') };
+    result.push(person);
+    if (person.email) byEmail[person.email.toLowerCase()] = true;
   });
-  // From nodes (fallback for legacy data)
+  (members || []).forEach(function(m) {
+    var email = String(m.email || '').trim().toLowerCase();
+    if (!email || byEmail[email]) return;
+    byEmail[email] = true;
+    result.push({ email: email, name: m.name || email.split('@')[0] });
+  });
+  return result;
+}
+
+function assigneeKey(person) {
+  return person.personId || person.email;
+}
+
+function getSortedAssignees() {
+  var userSet = {};
+  var seenEmail = {};
+  teamMembers.forEach(function(m) {
+    var email = String(m.email || '').trim().toLowerCase();
+    var key = String(assigneeKey(m) || '').trim();
+    if (!key) return;
+    userSet[key.toLowerCase()] = { key: key, personId: m.personId || null,
+      email: email, name: m.name || (email ? email.split('@')[0] : 'Unnamed person') };
+    if (email) seenEmail[email] = true;
+  });
   nodes.forEach(function(n) {
-    if (n.owner && n.owner.trim()) { var k = n.owner.trim().toLowerCase(); if (!userSet[k]) userSet[k] = { email: n.owner.trim(), name: n.owner.trim().split('@')[0] }; }
-    if (n.assignedTo && n.assignedTo.trim()) { var k = n.assignedTo.trim().toLowerCase(); if (!userSet[k]) userSet[k] = { email: n.assignedTo.trim(), name: n.assignedTo.trim().split('@')[0] }; }
+    [n.owner, n.assignedTo].forEach(function(raw) {
+      var email = String(raw || '').trim().toLowerCase();
+      if (!email || seenEmail[email]) return;
+      seenEmail[email] = true;
+      userSet[email] = { key: email, personId: null, email: email, name: email.split('@')[0] };
+    });
   });
   var users = Object.values(userSet);
   var now = Date.now();
   users.sort(function(a, b) {
-    var sa = MomentumCore.assigneeScore(assigneeFavourites[a.email.toLowerCase()], now);
-    var sb = MomentumCore.assigneeScore(assigneeFavourites[b.email.toLowerCase()], now);
+    var sa = MomentumCore.assigneeScore(assigneeFavourites[a.key.toLowerCase()] || assigneeFavourites[a.email], now);
+    var sb = MomentumCore.assigneeScore(assigneeFavourites[b.key.toLowerCase()] || assigneeFavourites[b.email], now);
     if (sa !== sb) return sb - sa;
     return a.name.localeCompare(b.name);
   });
@@ -3201,7 +3250,7 @@ function showCombinedPicker(sourceNode) {
 
   var NO_SECTION = '__no_section__';
   var selectedSection = lastPickedSection === undefined ? (sourceNode.parentId || null) : lastPickedSection;
-  var selectedAssignee = lastPickedAssignee || sourceNode.assignedTo || null;
+  var selectedAssignee = lastPickedAssignee || sourceNode.assigneePersonId || sourceNode.assignedTo || null;
   var focusCol = 'section'; // 'section' or 'assignee'
   var hiSection = selectedSection === null ? NO_SECTION : selectedSection;
   var hiAssignee = selectedAssignee;
@@ -3288,7 +3337,7 @@ function showCombinedPicker(sourceNode) {
     if (!asgQuery) return users;
     var q = asgQuery.toLowerCase();
     return users.filter(function(u) {
-      var email = (u.email || u).toLowerCase();
+      var email = String(u.email || '').toLowerCase();
       var name = (u.name || '').toLowerCase();
       return email.indexOf(q) > -1 || name.indexOf(q) > -1;
     });
@@ -3305,18 +3354,20 @@ function showCombinedPicker(sourceNode) {
     var noAssign = hiAssignee === null && focusCol === 'assignee';
     list.innerHTML = '<div class="apick" data-email="" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + (noAssign ? 'var(--accent)' : '') + ';color:' + (noAssign ? 'var(--bg)' : 'var(--text3)') + ';">No assignee</div>' +
       users.map(function(u) {
-        var email = u.email || u;
-        var name = u.name || email.split('@')[0];
-        var isHi = email.toLowerCase() === (hiAssignee || '').toLowerCase() && focusCol === 'assignee';
-        var isSel = email.toLowerCase() === (selectedAssignee || '').toLowerCase();
+        var email = u.email || '';
+        var key = u.key;
+        var name = u.name;
+        var isHi = key.toLowerCase() === (hiAssignee || '').toLowerCase() && focusCol === 'assignee';
+        var isSel = key.toLowerCase() === (selectedAssignee || '').toLowerCase();
         var isMe = email.toLowerCase() === (currentUser || '').toLowerCase();
-        var fav = MomentumCore.favouriteCount(assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
+        var fav = MomentumCore.favouriteCount(assigneeFavourites[key.toLowerCase()] || assigneeFavourites[email.toLowerCase()]) > 0 ? '★ ' : '';
         var bg = isHi ? 'var(--accent)' : isSel ? 'var(--bg3)' : '';
         var col = isHi ? 'var(--bg)' : '';
-        return '<div class="apick" data-email="' + esc(email) + '" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
+        return '<div class="apick" data-email="' + esc(key) + '" style="padding:5px 12px;cursor:pointer;font-size:12px;background:' + bg + ';color:' + col + ';">' +
           '<span style="font-size:9px;color:' + (isHi ? 'var(--bg)' : 'var(--accent)') + ';">' + fav + '</span>' +
           esc(name) + (isMe ? ' <span style="font-size:9px;opacity:0.6">(me)</span>' : '') +
-          '<span style="font-size:9px;color:' + (isHi ? 'rgba(255,255,255,0.6)' : 'var(--text3)') + ';margin-left:4px;">' + esc(email) + '</span></div>';
+          '<span style="font-size:9px;color:' + (isHi ? 'rgba(255,255,255,0.6)' : 'var(--text3)') + ';margin-left:4px;">' + esc(email || 'email not linked') + '</span>' +
+          (!email && u.personId ? ' <button type="button" class="apick-link-email" data-person="' + esc(key) + '">Add email</button>' : '') + '</div>';
       }).join('') +
       (function() {
         var isHiNew = hiAssignee === '__add_new__' && focusCol === 'assignee';
@@ -3336,7 +3387,7 @@ function showCombinedPicker(sourceNode) {
     var s = document.getElementById('pickerStatus');
     if (!s) return;
     var secName = selectedSection ? (nodes.find(function(n){return n.id===selectedSection;})||{}).name || '' : 'No project';
-    var asgName = selectedAssignee ? selectedAssignee.split('@')[0] : 'No assignee';
+    var asgName = selectedAssignee ? getMemberName(selectedAssignee) : 'No assignee';
     s.textContent = 'Section: ' + secName + '  ·  Assign: ' + asgName;
   }
 
@@ -3365,9 +3416,6 @@ function showCombinedPicker(sourceNode) {
     if (document.activeElement && document.activeElement.id === 'asgSearch' && e.key === 'Tab') return;
     var visibleSecs = getVisibleSections();
     var secIds = visibleSecs.map(function(x) { return x.node.id; });
-    // Assignee list: array of email strings ('' = none)
-    var asgEmailList = [''].concat(filteredAssignees().map(function(u) { return u.email || u; }));
-
     var ADD_NEW_SENTINEL = '__add_new__';
 
     if (focusCol === 'section') {
@@ -3409,8 +3457,8 @@ function showCombinedPicker(sourceNode) {
       }
       else if (e.key === 'Escape') { cleanup(); }
     } else {
-      // Assignee column — list includes '' (none), emails, and ADD_NEW_SENTINEL at end
-      var asgFullList = [''].concat(filteredAssignees().map(function(u) { return u.email || u; })).concat([ADD_NEW_SENTINEL]);
+      // Assignee column — person IDs, legacy emails, and the add-new option.
+      var asgFullList = [''].concat(filteredAssignees().map(function(u) { return u.key; })).concat([ADD_NEW_SENTINEL]);
       var aIdx = asgFullList.indexOf(hiAssignee || '');
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -3428,10 +3476,10 @@ function showCombinedPicker(sourceNode) {
         e.preventDefault();
         if (hiAssignee === ADD_NEW_SENTINEL) {
           // Open add member form
-          showAddMemberForm(overlay, function(email, name) {
-            teamMembers.push({ email: email, name: name });
-            hiAssignee = email;
-            selectedAssignee = email;
+          showAddMemberForm(overlay, function(person) {
+            teamMembers.push(person);
+            hiAssignee = assigneeKey(person);
+            selectedAssignee = hiAssignee;
             render();
           });
         } else {
@@ -3466,12 +3514,21 @@ function showCombinedPicker(sourceNode) {
   });
 
   overlay.querySelector('#asgList').addEventListener('click', function(e) {
+    var linkButton = e.target.closest('.apick-link-email');
+    if (linkButton) {
+      var person = teamMembers.find(function(m) { return m.personId === linkButton.dataset.person; });
+      if (person) showAddMemberForm(overlay, function(saved) {
+        updateLinkedPerson(saved);
+        renderAssignees();
+      }, person);
+      return;
+    }
     // Handle "Add new member" button
     if (e.target.closest('.apick-new')) {
-      showAddMemberForm(overlay, function(email, name) {
-        teamMembers.push({ email: email, name: name });
-        hiAssignee = email;
-        selectedAssignee = email;
+      showAddMemberForm(overlay, function(person) {
+        teamMembers.push(person);
+        hiAssignee = assigneeKey(person);
+        selectedAssignee = hiAssignee;
         renderAssignees();
       });
       return;
@@ -3505,13 +3562,21 @@ function showCombinedPicker(sourceNode) {
   setTimeout(function() { document.addEventListener('keydown', escH); }, 100);
 }
 
-function showAddMemberForm(parentOverlay, onSave) {
+function updateLinkedPerson(person) {
+  var index = teamMembers.findIndex(function(m) { return m.personId === person.personId; });
+  if (index >= 0) teamMembers[index] = person;
+  fetchAll(false).catch(function() {
+    showStatusBanner('Email linked, but tasks could not refresh. Please reload.', 'error');
+  });
+}
+
+function showAddMemberForm(parentOverlay, onSave, existingPerson) {
   var form = document.createElement('div');
   form.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:10;border-radius:12px;';
   form.innerHTML = '<div style="background:var(--bg);border-radius:10px;padding:20px;width:280px;box-shadow:0 4px 16px rgba(0,0,0,0.2);">' +
-    '<div style="font-size:13px;font-weight:500;margin-bottom:12px;">Add team member</div>' +
-    '<input id="newMemberName" type="text" placeholder="Name" style="width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box;">' +
-    '<input id="newMemberEmail" type="email" placeholder="Email" style="width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;margin-bottom:12px;box-sizing:border-box;">' +
+    '<div style="font-size:13px;font-weight:500;margin-bottom:12px;">' + (existingPerson ? 'Add email to person' : 'Add person') + '</div>' +
+    '<input id="newMemberName" type="text" placeholder="Name" value="' + esc(existingPerson && existingPerson.name || '') + '" style="width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box;">' +
+    '<input id="newMemberEmail" type="email" placeholder="Email (optional)" style="width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;margin-bottom:12px;box-sizing:border-box;">' +
     '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
     '<button class="cancel-member-btn" style="padding:6px 14px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);cursor:pointer;">Cancel</button>' +
     '<button id="saveMemberBtn" style="padding:6px 14px;font-size:12px;border:none;border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer;font-weight:500;">Add</button>' +
@@ -3534,42 +3599,61 @@ function showAddMemberForm(parentOverlay, onSave) {
   form.querySelector('#saveMemberBtn').onclick = function() {
     var name = form.querySelector('#newMemberName').value.trim();
     var email = form.querySelector('#newMemberEmail').value.trim().toLowerCase();
-    if (!email || !email.includes('@')) { form.querySelector('#newMemberEmail').style.borderColor = 'var(--accent)'; form.querySelector('#newMemberEmail').focus(); return; }
+    if (!name) { form.querySelector('#newMemberName').style.borderColor = 'var(--accent)'; form.querySelector('#newMemberName').focus(); return; }
+    if ((existingPerson && !email) || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      form.querySelector('#newMemberEmail').style.borderColor = 'var(--accent)'; form.querySelector('#newMemberEmail').focus(); return;
+    }
     var button = form.querySelector('#saveMemberBtn');
     button.disabled = true;
-    gsr('saveTeamMember', { email: email, name: name }).then(function(result) {
-      if (!result || result.ok !== true) throw new Error('Team member was not saved');
+    gsr('savePerson', { personId: existingPerson && existingPerson.personId || null, email: email, name: name }).catch(function(error) {
+      // A still-running older backend can add an email member, but cannot save
+      // a name-only person. Do not silently store a provisional person locally.
+      if (!existingPerson && email && /Unknown function/.test(String(error && error.message || '')))
+        return gsr('saveTeamMember', { email: email, name: name })
+          .then(function(saved) { return { ok: saved && saved.ok, person: { email: email, name: name } }; });
+      throw error;
+    }).then(function(result) {
+      if (!result || result.ok !== true || !result.person) throw new Error('Person was not saved');
       form.remove();
-      onSave(email, name || email.split('@')[0]);
+      onSave(result.person);
     }).catch(function(error) {
       button.disabled = false;
       var denied = /permission denied|unauthorized/i.test(String(error && error.message || ''));
-      showStatusBanner(denied ? 'Only the app owner can add team members.' : 'Could not add team member. Please retry.', 'error');
+      showStatusBanner(denied ? 'Only the app owner can add people.' : 'Could not add person. Please retry.', 'error');
     });
   };
 }
 
-function applyAssignmentFields(node, email) {
+function applyAssignmentFields(node, choice) {
+  var key = String(choice || '').toLowerCase();
+  var person = teamMembers.find(function(m) {
+    return String(m.personId || '').toLowerCase() === key || String(m.email || '').toLowerCase() === key;
+  });
+  if (choice && !person && key.indexOf('@') === -1) {
+    showStatusBanner('The people list has not loaded yet. Please retry.', 'error');
+    return false;
+  }
   var previous = node.assignedTo;
+  var email = person ? String(person.email || '').toLowerCase() : key;
   node.assignedTo = email || null;
-  // The email-only picker asks the backend to resolve the new person ID.
-  node.assigneePersonId = null;
-  node.assignedBy = email ? (currentUser || '') : null;
+  node.assigneePersonId = person && person.personId ? person.personId : null;
+  node.assignedBy = choice ? (currentUser || '') : null;
   node.sharedWith = MomentumCore.replaceAssignmentShare(node.sharedWith, previous, email);
+  return true;
 }
 
-function applyAssignment(node, email) {
+function applyAssignment(node, choice) {
   pushUndo();
-  applyAssignmentFields(node, email);
+  if (!applyAssignmentFields(node, choice)) return;
   scheduleSave(node);
   render();
 }
 
-function applyPicker(node, sectionId, assigneeEmail) {
+function applyPicker(node, sectionId, assigneeChoice) {
   pushUndo();
+  if (!applyAssignmentFields(node, assigneeChoice)) return;
   var targetParent = sectionId || null;
   node.parentId = targetParent;
-  applyAssignmentFields(node, assigneeEmail);
   node.date = node.date || localDateTime();
   // Reposition in tree (under the chosen section, or at the end of root level)
   var curIdx = nodes.findIndex(function(x) { return x.id === node.id; });
@@ -3595,7 +3679,7 @@ function applyPicker(node, sectionId, assigneeEmail) {
 }
 
 function moveTo(node, parentId) {
-  applyPicker(node, parentId, node.assignedTo || null);
+  applyPicker(node, parentId, node.assigneePersonId || node.assignedTo || null);
 }
 
 function assignTo(node, email) {
