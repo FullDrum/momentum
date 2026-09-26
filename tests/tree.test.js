@@ -223,6 +223,44 @@ test('workflow: type parent, Enter, then Tab nests the new node under the parent
   assert.deepEqual(c.nodes.map(n => n.id), ['p', newId], 'child now sits below the parent');
 });
 
+test('workflow: Enter -> type Parent -> Enter -> Tab (empty sibling) -> type Child', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.lastPickedSection = undefined;
+  c.nodes = [];
+
+  // Enter -> T1 (empty)
+  c.addTodayTask();
+  const t1 = c.focusId;
+  assert.ok(t1, 'first task created');
+  // type Parent
+  c.nodes.find(n => n.id === t1).name = 'Parent';
+
+  // Enter -> T2 (empty sibling below T1)
+  c.handleKey(
+    { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} },
+    { dataset: { id: t1, flat: 'true' }, value: 'Parent' }
+  );
+  const t2 = c.focusId;
+  assert.ok(t2 && t2 !== t1, 'sibling created below parent');
+
+  // Tab on the empty sibling -> indent it under T1
+  c.handleKey(
+    { key: 'Tab', shiftKey: false, preventDefault() {} },
+    { dataset: { id: t2, flat: 'true' }, value: '' }
+  );
+  assert.equal(c.nodes.find(n => n.id === t2).parentId, t1, 'empty sibling indented under parent');
+  assert.equal(c.focusId, t2, 'cursor stays on the indented sibling');
+
+  // type Child
+  c.nodes.find(n => n.id === t2).name = 'Child';
+  assert.equal(c.nodes.find(n => n.id === t2).name, 'Child', 'typed text lands in the indented sibling');
+  assert.equal(c.nodes.find(n => n.id === t2).parentId, t1, 'child remains nested');
+});
+
 test('workflow: Tab-indent a task, then Enter creates a sibling in that parent', () => {
   const c = app();
   c.activeTab = 'all';
