@@ -1418,13 +1418,14 @@ function handleKey(e, inp) {
     var newParentId;
     var nn;
     if (parentIsTask) {
-      // Sibling in the same parent (a task), inheriting its date so it stays grouped.
+      // Sibling in the same parent (a task); align its date to the parent so it
+      // stays grouped under that parent even when the current child's date differs.
       newParentId = cur.parentId;
       nn = {
         id: newId(), name: '',
         parentId: newParentId,
         isSection: false, done: false,
-        date: cur.date || null,
+        date: parentNode.date || null,
         owner: currentUser
       };
     } else {
@@ -1570,9 +1571,9 @@ function handleKey(e, inp) {
       }
     }
     if (!target) return;
-    // In date-grouped views, only nest within the same date group so the child
-    // stays under its new parent; cross-date nesting belongs in Projects.
-    if ((activeTab === 'today' || activeTab === 'all') && dateKey(target) !== dateKey(cur)) return;
+    // Align the child's date to its new parent so they stay in the same date
+    // group (rather than blocking an indent when the dates differ).
+    if (activeTab === 'today' || activeTab === 'all') cur.date = target.date;
     cur.parentId = target.id;
     collapsed[target.id] = false; saveCollapsed();
     // Move node after ALL of target's descendants (true last child position)

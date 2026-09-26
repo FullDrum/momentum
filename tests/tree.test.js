@@ -97,10 +97,10 @@ test('structure: same-date nesting and set-to-today cascade are wired', () => {
   assert.match(src, /setTaskToday\(/);
 });
 
-test('structure: Tab indent is enabled in Today/All Tasks with a same-date guard', () => {
+test('structure: Tab indent is enabled in Today/All Tasks and aligns the child date', () => {
   const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
   assert.doesNotMatch(src, /inp\.dataset\.flat === 'true'\) return/, 'flat-view Tab guard is removed');
-  assert.match(src, /dateKey\(target\) !== dateKey\(cur\)/, 'same-date indent guard exists');
+  assert.match(src, /cur\.date = target\.date/, 'indent aligns the child date to the parent');
 });
 
 test('structure: service worker auto-activates on install', () => {
@@ -251,4 +251,43 @@ test('workflow: Tab-indent a task, then Enter creates a sibling in that parent',
   assert.ok(nn, 'new node created');
   assert.equal(nn.parentId, 'p', 'new node is a sibling under p');
   assert.equal(c.focusId, nn.id, 'new node is focused');
+});
+
+test('Tab indents an empty node and aligns its date to the parent', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = 'e'; // the empty node is focused/being edited
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    { id: 'e', name: '', parentId: null, isSection: false, done: false, date: '2026-09-20 10:00:00', order: 1 }
+  ];
+  c.handleKey(
+    { key: 'Tab', shiftKey: false, preventDefault() {} },
+    { dataset: { id: 'e', flat: 'true' }, value: '' }
+  );
+  const e = c.nodes.find(n => n.id === 'e');
+  assert.equal(e.parentId, 'p', 'empty node indented under the parent');
+  assert.equal(e.date.slice(0, 10), '2026-09-19', 'child date aligned to the parent');
+});
+
+test('Enter on an older child aligns the new sibling to the parent date', () => {
+  const c = app();
+  c.activeTab = 'all';
+  c.hideDone = false;
+  c.collapsed = {};
+  c.focusId = null;
+  c.nodes = [
+    node('p', 'Parent', null, '2026-09-19 10:00:00'),
+    node('c', 'Older child', 'p', '2026-09-18 10:00:00') // different date from parent
+  ];
+  c.handleKey(
+    { key: 'Enter', shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} },
+    { dataset: { id: 'c', flat: 'true' }, value: 'Older child' }
+  );
+  const nn = c.nodes.find(n => n.id !== 'p' && n.id !== 'c');
+  assert.ok(nn, 'new node created');
+  assert.equal(nn.parentId, 'p', 'new node is a sibling under the parent');
+  assert.equal(nn.date.slice(0, 10), '2026-09-19', 'sibling date aligned to the parent date');
 });
