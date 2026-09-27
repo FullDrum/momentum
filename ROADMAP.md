@@ -1,6 +1,6 @@
 # Momentum — Roadmap
 
-Last updated: 27 September 2026 (Pacific/Auckland)
+Last updated: 28 September 2026 (Pacific/Auckland)
 
 This is the agreed forward plan. The items below marked implemented are present
 in the local checkout. GitHub and production deployment status must be checked
@@ -63,8 +63,15 @@ dependency order and split into backend prerequisites and later features.
    backfill (2 people created, 39 nodes linked); a second preview found no
    remaining work or conflicts. A name-only assignment kept its person ID when
    an email was linked. These changes are not installed in the live app. A
-   signed-in non-owner test is still needed before release. Existing project
-   sharing may also expose a task independently of its assignment.
+   The disposable copy also confirmed that the test assignee saw one assigned
+   task while an unrelated email saw none, using owner-run backend checks.
+   Google sign-in succeeded for the test account. The final signed-in request
+   to the test backend could not be completed from the local probe (the browser
+   blocked the cross-origin request and the local relay had no outbound route).
+   The test account was removed from the allow-list, its synthetic assignment
+   was restored, and the test deployment was archived. A real non-owner API
+   request is still needed before live rollout. Existing project sharing may
+   also expose a task independently of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without
    exposing hidden tasks.
@@ -82,8 +89,8 @@ dependency order and split into backend prerequisites and later features.
 
 ## Notes
 
-- The backend source and Sheet live outside this repository. Export `Code.gs`, the manifest,
-  and the Sheet header row before implementing item 2; the current `backend-auth.patch`
-  contains only the previous security change, not a full backend source copy.
+- The live Sheet and Apps Script deployment are separate from this repository.
+  `backend/Code.gs` and `backend/People.gs` are local source copies; verify the
+  live Sheet headers and deploy both backend files before publishing the new UI.
 - Sync acknowledgement/retry is data-critical: read `RELIABILITY.md` before changing sync.
 - Bump the cache name in `sw.js` when cached assets change.
