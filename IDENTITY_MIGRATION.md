@@ -70,6 +70,10 @@ backfill preview and migration, and server-side assignment resolution.
 `backend/Code.gs` routes these functions and includes `assigneePersonId` after
 `watching` in the node schema. The local frontend picker selects people by ID,
 allows name-only creation, and links an email later; backup restore preserves
-person IDs. These changes are local only. They have not been tested against a
-disposable Sheet or deployed. Deploy backend and frontend together after that
-validation; the live email-based backend cannot save a name-only assignment.
+person IDs. On 27 September, the disposable Sheet migration created 2 people
+and linked 39 nodes; a repeat preview showed zero pending changes and no
+conflicts. A test function also created a name-only person, assigned a task,
+linked an email, and verified that the task retained the same person ID and
+gained the email. The signed-in non-owner access checks in rollout step 5
+remain pending. Nothing has been deployed to the live backend or frontend;
+they must be deployed together after that validation.

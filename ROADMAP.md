@@ -1,6 +1,6 @@
 # Momentum — Roadmap
 
-Last updated: 26 September 2026 (Pacific/Auckland)
+Last updated: 27 September 2026 (Pacific/Auckland)
 
 This is the agreed forward plan. The items below marked implemented are present
 in the local checkout. GitHub and production deployment status must be checked
@@ -59,8 +59,12 @@ dependency order and split into backend prerequisites and later features.
    The local `identity.js` module and tests cover the core transition rules; backend and UI
    integration is in progress. `backend/Code.gs` and `backend/People.gs` now contain
    local migration and assignment code, and `app.js` has a local name-only picker and
-   email-linking form. They are not installed in the live app. Existing project sharing may also expose a task independently
-   of its assignment.
+   email-linking form. On 27 September, a disposable Sheet copy passed the
+   backfill (2 people created, 39 nodes linked); a second preview found no
+   remaining work or conflicts. A name-only assignment kept its person ID when
+   an email was linked. These changes are not installed in the live app. A
+   signed-in non-owner test is still needed before release. Existing project
+   sharing may also expose a task independently of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without
    exposing hidden tasks.
