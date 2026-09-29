@@ -106,6 +106,23 @@ test('creating a name-only person sends no email and uses the returned person ID
   assert.equal(saved.personId, 'person-pat');
 });
 
+test('person names appear without waiting for a slow team lookup', async () => {
+  const a = app(); a.login();
+  const badge = { dataset: { personRef: 'person-pat', personPrefix: '' }, textContent: 'Assigned person' };
+  a.c.document.querySelectorAll = selector => selector === '.assignee-badge[data-person-ref]' ? [badge] : [];
+  a.c.gsr = fn => {
+    if (fn === 'getInitialData') return Promise.resolve({ nodes: [], user: 'alice@example.com' });
+    if (fn === 'getPeople') return Promise.resolve({ people: [
+      { personId: 'person-pat', name: 'Pat', email: '' }
+    ] });
+    if (fn === 'getTeamMembers') return new Promise(() => {});
+    throw new Error('Unexpected request');
+  };
+  await a.c.fetchAll(true);
+  await new Promise(setImmediate);
+  assert.equal(badge.textContent, 'Pat');
+});
+
 test('person ID assignment retains identity while removing the old email share', () => {
   const a = app(); a.login();
   a.c.teamMembers = [{ personId: 'person-pat', name: 'Pat', email: '' }];

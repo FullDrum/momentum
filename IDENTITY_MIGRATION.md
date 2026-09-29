@@ -81,6 +81,9 @@ returned one assigned task, and the owner-only `getPeople` route returned
 check. Temporary allow-list access was removed and the test deployment was
 archived. Its archived configuration still says `Anyone`; restrict it before
 any future reactivation.
-Nothing has been deployed to the live backend or frontend; before deploying
-them together, verify the live Sheet headers and review independent project
-sharing rules.
+On 29 September, the live Sheet headers were verified and corrected. A fresh
+copy of the live Sheet was made before migration. The live backfill created 2
+people and linked 43 nodes without conflicts; Apps Script version 295 is deployed
+at the existing endpoint. The production site serves the person-aware frontend,
+and the owner loaded tasks and the people list successfully. Independent project
+sharing still grants visibility separately from assignment, as described above.

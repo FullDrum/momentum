@@ -1,6 +1,6 @@
 # Momentum — Roadmap
 
-Last updated: 28 September 2026 (Pacific/Auckland)
+Last updated: 29 September 2026 (Pacific/Auckland)
 
 This is the agreed forward plan. The items below marked implemented are present
 in the local checkout. GitHub and production deployment status must be checked
@@ -51,15 +51,14 @@ dependency order and split into backend prerequisites and later features.
 
 ## Later features (dependency order)
 
-2. **Stable `personId` + provisional name-only people** — replace email-as-identity with a
+2. **Stable `personId` + provisional name-only people — deployed.** Replace email-as-identity with a
    stable `personId` (name, optional email, status); migrate legacy email assignments; let a
    manager create a person by name and attach an email later without breaking prior assignments.
    Name-only people are assignable immediately; the assignment grants no team account access
    until an authorised email is linked. See `IDENTITY_MIGRATION.md` for the rollout contract.
-   The local `identity.js` module and tests cover the core transition rules; backend and UI
-   integration is in progress. `backend/Code.gs` and `backend/People.gs` now contain
-   local migration and assignment code, and `app.js` has a local name-only picker and
-   email-linking form. On 27 September, a disposable Sheet copy passed the
+   The local `identity.js` module and tests cover the core transition rules;
+   `backend/Code.gs` and `backend/People.gs` contain migration and assignment code,
+   and `app.js` has a name-only picker and email-linking form. On 27 September, a disposable Sheet copy passed the
    backfill (2 people created, 39 nodes linked); a second preview found no
    remaining work or conflicts. A name-only assignment kept its person ID when
    an email was linked. On 28 September, a signed-in non-owner test account
@@ -67,9 +66,14 @@ dependency order and split into backend prerequisites and later features.
    people-management request returned `Permission denied`. An unrelated email
    saw no tasks in the owner-run access check. The test account was removed
    from the allow-list, its synthetic assignment was restored, and the test
-   deployment was archived. These changes are not installed in the live app.
-   Before rollout, verify the live Sheet headers and review whether existing
-   project sharing exposes a task independently of its assignment.
+   deployment was archived. On 29 September, the live Sheet headers were verified and
+   corrected, three ownerless tasks were assigned to the owner, and a fresh Sheet backup
+   was made. The live migration created 2 people and linked 43 tasks with no conflicts;
+   Apps Script version 295 was deployed to the existing endpoint. The production site
+   serves the person-aware frontend and the owner can load tasks and people. The
+   frontend shows person names as soon as the people request succeeds, without
+   waiting for the slower team request. Existing project sharing can expose a
+   task independently of assignment; held assignments remain a later feature.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without
    exposing hidden tasks.
@@ -88,7 +92,7 @@ dependency order and split into backend prerequisites and later features.
 ## Notes
 
 - The live Sheet and Apps Script deployment are separate from this repository.
-  `backend/Code.gs` and `backend/People.gs` are local source copies; verify the
-  live Sheet headers and deploy both backend files before publishing the new UI.
+  `backend/Code.gs` and `backend/People.gs` are local source copies. Their current
+  release was installed in the live Apps Script project as version 295.
 - Sync acknowledgement/retry is data-critical: read `RELIABILITY.md` before changing sync.
 - Bump the cache name in `sw.js` when cached assets change.

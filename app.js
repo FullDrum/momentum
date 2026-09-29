@@ -424,13 +424,18 @@ async function fetchAll(initial) {
   }
 
   var serverNodes = MomentumCore.overlayQueue(normalizeNodes(data.nodes || []), queueState);
-  Promise.allSettled([gsr('getPeople'), gsr('getTeamMembers')]).then(function(results) {
+  var people = [], members = [];
+  function updateAssignees() {
     if (fetchingOwner !== queueOwner) return;
-    var people = results[0].status === 'fulfilled' && results[0].value &&
-      Array.isArray(results[0].value.people) ? results[0].value.people : [];
-    var members = results[1].status === 'fulfilled' && Array.isArray(results[1].value) ? results[1].value : [];
     teamMembers = mergeAssigneeSources(people, members);
-  });
+    refreshAssigneeBadges();
+  }
+  gsr('getPeople').then(function(result) {
+    if (result && Array.isArray(result.people)) { people = result.people; updateAssignees(); }
+  }, function() {});
+  gsr('getTeamMembers').then(function(result) {
+    if (Array.isArray(result)) { members = result; updateAssignees(); }
+  }, function() {});
 
   if (initial) {
     // Fresh boot — no local state worth preserving. Just load server state.
@@ -1046,13 +1051,14 @@ function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
     if (bc) meta += '<span class="breadcrumb project-link" data-goto="' + n.id + '" title="Go to in Projects">' + esc(bc) + '</span>';
     var nd = n.date ? n.date.slice(0,10) : null;
     var isToday = nd === TODAY;
-    if ((n.assigneePersonId || n.assignedTo) && n.assignedTo !== currentUser) meta += `<span class="assignee-badge">${esc(getMemberName(n.assigneePersonId || n.assignedTo))}</span>`;
-    else if (n.assignedTo === currentUser && n.assignedBy) meta += `<span class="assignee-badge">from ${esc(getMemberName(n.assignedBy))}</span>`;
+    if ((n.assigneePersonId || n.assignedTo) && n.assignedTo !== currentUser) meta += memberBadge(n.assigneePersonId || n.assignedTo);
+    else if (n.assignedTo === currentUser && n.assignedBy) meta += memberBadge(n.assignedBy, 'from ');
     meta += '<span class="today-badge' + (isToday ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday ? 'Remove from today' : 'Set to today') + '">' + (isToday ? 'today' : nd ? nd.slice(8) + '/' + nd.slice(5,7) : '—') + '</span>';
   } else if (!n.isSection) {
     var nd2 = n.date ? n.date.slice(0,10) : null;
     var isToday2 = nd2 === TODAY;
-    if (n.assigneePersonId || n.assignedTo) meta += `<span class="assignee-badge">${n.assignedTo === currentUser ? 'mine' : esc(getMemberName(n.assigneePersonId || n.assignedTo))}</span>`;
+    if (n.assigneePersonId || n.assignedTo) meta += n.assignedTo === currentUser
+      ? '<span class="assignee-badge">mine</span>' : memberBadge(n.assigneePersonId || n.assignedTo);
     meta = '<span class="today-badge' + (isToday2 ? ' is-today' : '') + '" data-settoday="' + n.id + '" title="' + (isToday2 ? 'Remove from today' : 'Set to today') + '">' + (isToday2 ? 'today' : nd2 ? nd2.slice(8) + '/' + nd2.slice(5,7) : '—') + '</span>' + meta;
   }
   if (n.watching) meta = '<span class="watch-badge" title="Done &amp; watching">👁</span>' + meta;
@@ -3061,6 +3067,18 @@ function getMemberName(reference) {
     return String(m.personId || '').toLowerCase() === key || String(m.email || '').toLowerCase() === key;
   });
   return member && member.name ? member.name : (key.includes('@') ? key.split('@')[0] : 'Assigned person');
+}
+
+function memberBadge(reference, prefix) {
+  prefix = prefix || '';
+  return '<span class="assignee-badge" data-person-ref="' + esc(reference) + '" data-person-prefix="' + esc(prefix) + '">' +
+    esc(prefix + getMemberName(reference)) + '</span>';
+}
+
+function refreshAssigneeBadges() {
+  document.querySelectorAll('.assignee-badge[data-person-ref]').forEach(function(badge) {
+    badge.textContent = (badge.dataset.personPrefix || '') + getMemberName(badge.dataset.personRef);
+  });
 }
 
 function orderBetween(beforeIdx, afterIdx) {
