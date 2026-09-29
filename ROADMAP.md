@@ -62,16 +62,14 @@ dependency order and split into backend prerequisites and later features.
    email-linking form. On 27 September, a disposable Sheet copy passed the
    backfill (2 people created, 39 nodes linked); a second preview found no
    remaining work or conflicts. A name-only assignment kept its person ID when
-   an email was linked. These changes are not installed in the live app. A
-   The disposable copy also confirmed that the test assignee saw one assigned
-   task while an unrelated email saw none, using owner-run backend checks.
-   Google sign-in succeeded for the test account. The final signed-in request
-   to the test backend could not be completed from the local probe (the browser
-   blocked the cross-origin request and the local relay had no outbound route).
-   The test account was removed from the allow-list, its synthetic assignment
-   was restored, and the test deployment was archived. A real non-owner API
-   request is still needed before live rollout. Existing project sharing may
-   also expose a task independently of its assignment.
+   an email was linked. On 28 September, a signed-in non-owner test account
+   received exactly one assigned task from the disposable backend; its
+   people-management request returned `Permission denied`. An unrelated email
+   saw no tasks in the owner-run access check. The test account was removed
+   from the allow-list, its synthetic assignment was restored, and the test
+   deployment was archived. These changes are not installed in the live app.
+   Before rollout, verify the live Sheet headers and review whether existing
+   project sharing exposes a task independently of its assignment.
 3. **Per-person stars + team visibility** — stars keyed `(taskId, personId, timestamp)`;
    `My starred` pinned at the top of Today; `Team starred` shows who starred what, without
    exposing hidden tasks.

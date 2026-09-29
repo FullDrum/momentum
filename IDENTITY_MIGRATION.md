@@ -74,10 +74,13 @@ person IDs. On 27 September, the disposable Sheet migration created 2 people
 and linked 39 nodes; a repeat preview showed zero pending changes and no
 conflicts. A test function also created a name-only person, assigned a task,
 linked an email, and verified that the task retained the same person ID and
-gained the email. Owner-run checks on the disposable copy found one visible
-task for the test assignee and none for an unrelated email. The test account
-also completed Google sign-in, but the local probe could not reach the test
-Apps Script API. A signed-in non-owner API check in rollout step 5 is still
-pending. Temporary allow-list access and the test deployment were removed.
-Nothing has been deployed to the live backend or frontend; they must be
-deployed together after that validation and a check of the live Sheet headers.
+gained the email. On 28 September, the signed-in test account called the
+disposable backend: `whoAmI` identified that account, `getInitialData`
+returned one assigned task, and the owner-only `getPeople` route returned
+`Permission denied`. An unrelated email saw no tasks in the owner-run access
+check. Temporary allow-list access was removed and the test deployment was
+archived. Its archived configuration still says `Anyone`; restrict it before
+any future reactivation.
+Nothing has been deployed to the live backend or frontend; before deploying
+them together, verify the live Sheet headers and review independent project
+sharing rules.
