@@ -99,8 +99,7 @@
           status.textContent='Saved task memory on server'+(original?' and original in separate archive':'');
           render();
         });
-        if(archiveSection.open){archiveSection.open=false;archiveSection.open=true;}
-      }).catch(function(err){status.textContent='Not saved. Archive error: '+err.message+'. Your text is still here.';})
+      }).catch(function(err){status.textContent='Save incomplete: '+err.message+'. Your text remains here; an original may already have been archived.';})
       .finally(function(){save.disabled=false;});
     };
     actions.append(save,cancel);panel.append(actions,el('h4','Short task history'),history,archiveSection);
