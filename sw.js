@@ -1,4 +1,4 @@
-const CACHE_NAME = 'momentum-v36';
+const CACHE_NAME = 'momentum-v37';
 const APP_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const APP_ASSETS = [
   './core.js',
   './app.js',
   './voice-task.js',
+  './task-memory.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
