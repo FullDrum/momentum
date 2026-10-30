@@ -60,6 +60,25 @@
           'Move '+proposal.taskName+' from '+proposal.fromParentName+' under '+proposal.toParentName :
           proposal.fromName+' '+proposal.type+' '+proposal.toName));
         preview.appendChild(el('p','Proposal only. No task has been moved or linked.','voice-muted'));
+        if(proposal.kind==='link'){
+          var approve=el('button','Approve and save link');approve.type='button';
+          approve.onclick=function(){
+            if(!window.confirm('Save this relationship between the two tasks?'))return;
+            approve.disabled=true;
+            var requestId=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():
+              String(Date.now())+'-'+Math.random().toString(36).slice(2);
+            archiveCall('taskLinksCreate',{fromId:proposal.fromId,toId:proposal.toId,
+              type:proposal.type,requestId:requestId,approved:true}).then(function(result){
+                if(result.error)throw new Error(result.error);
+                preview.appendChild(el('p','Link saved on server.','voice-muted'));
+                approve.remove();
+              }).catch(function(err){
+                preview.appendChild(el('p','Link not saved: '+err.message,'voice-muted'));
+                approve.disabled=false;
+              });
+          };
+          preview.appendChild(approve);
+        }
       }catch(err){preview.textContent=err.message;}
     };
     structure.append(structureTitle,el('label','Change type'),kind,el('label','Target task / project'),target,propose,preview);
