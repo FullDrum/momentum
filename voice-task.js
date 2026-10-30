@@ -68,7 +68,13 @@
         });
       }).catch(function(err){archiveStatus.textContent='Archive unavailable: '+err.message;});
     });
-    function render(){history.replaceChildren();load(id).forEach(function(item){history.appendChild(el('div',new Date(item.at).toLocaleString()+' · '+item.text,'voice-note'));});}
+    function render(){history.replaceChildren();load(id).forEach(function(item){
+      var m=item.memory||{},lines=[new Date(item.at).toLocaleString()+' · '+item.text];
+      if(m.outcome)lines.push('Result: '+m.outcome);
+      if(m.nextAction)lines.push('Next: '+m.nextAction);
+      if(m.status)lines.push('Status: '+m.status);
+      history.appendChild(el('div',lines.join('\\n'),'voice-note'));
+    });}
     save.onclick=function(){
       var note=summary.value.trim();if(!note){status.textContent='Enter a short note first';return;}
       if(approval.checked&&!window.confirm('Save this note to local history?'))return;
@@ -76,9 +82,10 @@
       save.disabled=true;
       var archive=original ? archiveCall('voiceArchiveStore',{taskId:id,transcript:original,keepOriginal:false}) : Promise.resolve({ok:true});
       archive.then(function(){
-        var a=load(id);a.unshift({at:new Date().toISOString(),text:note});
+        var a=load(id);var memory=window.MomentumTaskMemory.fromReviewedText(note,outcome.value,nextAction.value,state.value,null);
+        a.unshift({at:new Date().toISOString(),text:note,memory:memory});
         localStorage.setItem(keyPrefix+id,JSON.stringify(a.slice(0,50)));
-        transcript.value='';summary.value='';status.textContent='Saved short note locally'+(original?' and original in separate archive':'');render();
+        transcript.value='';summary.value='';outcome.value='';nextAction.value='';status.textContent='Saved short note locally'+(original?' and original in separate archive':'');render();
         if(archiveSection.open){archiveSection.open=false;archiveSection.open=true;}
       }).catch(function(err){status.textContent='Not saved. Archive error: '+err.message+'. Your text is still here.';})
       .finally(function(){save.disabled=false;});
