@@ -41,6 +41,29 @@
     var approvalLabel=el('label',' Require confirmation');approvalLabel.prepend(approval);panel.appendChild(approvalLabel);
     var actions=el('div',null,'voice-controls'),save=el('button','Save short note'),cancel=el('button','Close');
     cancel.onclick=close;
+    var structure=el('details'),structureTitle=el('summary','Task structure · propose move or link');
+    var target=el('select'),kind=el('select'),preview=el('div',null,'voice-note');
+    [['move','Move under parent'],['related','Related to'],['blocks','Blocks'],['supports','Supports'],['alternative','Alternative to']].forEach(function(pair){
+      var option=el('option',pair[1]);option.value=pair[0];kind.appendChild(option);
+    });
+    (typeof nodes!=='undefined'?nodes:[]).filter(function(n){return n.id!==id;}).forEach(function(n){
+      var option=el('option',n.name);option.value=n.id;target.appendChild(option);
+    });
+    var propose=el('button','Preview change');propose.type='button';
+    propose.onclick=function(){
+      try{
+        var relation=window.MomentumTaskRelations;
+        var proposal=kind.value==='move' ? relation.proposeMove(nodes,id,target.value) :
+          relation.proposeLink(nodes,id,target.value,kind.value);
+        preview.replaceChildren();
+        preview.appendChild(el('p',proposal.kind==='move'?
+          'Move '+proposal.taskName+' from '+proposal.fromParentName+' under '+proposal.toParentName :
+          proposal.fromName+' '+proposal.type+' '+proposal.toName));
+        preview.appendChild(el('p','Proposal only. No task has been moved or linked.','voice-muted'));
+      }catch(err){preview.textContent=err.message;}
+    };
+    structure.append(structureTitle,el('label','Change type'),kind,el('label','Target task / project'),target,propose,preview);
+    panel.appendChild(structure);
     var archiveSection=el('details');
     var archiveHeading=el('summary','Original transcripts (private archive)');
     var archiveStatus=el('p','Open to load archived originals.','voice-muted');
