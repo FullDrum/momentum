@@ -100,6 +100,8 @@ function routeFunction(fn, arg, user) {
     case 'voiceArchiveStore':   return voiceArchiveStore_(arg, user);
     case 'voiceArchiveList':    return voiceArchiveList_(arg, user);
     case 'voiceArchiveKeep':    return voiceArchiveKeep_(arg, user);
+    case 'voiceMemoryStore':    return voiceMemoryStore_(arg, user);
+    case 'voiceMemoryList':     return voiceMemoryList_(arg, user);
     case 'savePerson':          return savePerson_(arg, user);
     case 'previewPersonBackfill': return previewPersonBackfill_(user);
     case 'migratePeople':       return migratePeople_(user);
