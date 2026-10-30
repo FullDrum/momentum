@@ -97,6 +97,9 @@ function routeFunction(fn, arg, user) {
     case 'getInitialData':      return getInitialData_pwa(user);
     case 'getTeamMembers':      return getTeamMembers();
     case 'getPeople':           return getPeople_(user);
+    case 'voiceArchiveStore':   return voiceArchiveStore_(arg, user);
+    case 'voiceArchiveList':    return voiceArchiveList_(arg, user);
+    case 'voiceArchiveKeep':    return voiceArchiveKeep_(arg, user);
     case 'savePerson':          return savePerson_(arg, user);
     case 'previewPersonBackfill': return previewPersonBackfill_(user);
     case 'migratePeople':       return migratePeople_(user);
