@@ -1084,8 +1084,9 @@ function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
   var dragHandle = '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
   var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
   var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
+  var voiceButton = !n.isSection ? '<button type="button" class="voice-task-btn" data-voice-task="' + esc(n.id) + '" title="Voice instructions and short history" aria-label="Voice instructions for ' + esc(n.name) + '">🎤</button>' : '';
   var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">⋯</button>' : '';
-  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${acts}${mobileMenu}${mobileZoom}${mobileToggle}</div>`;
+  return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${voiceButton}${acts}${mobileMenu}${mobileZoom}${mobileToggle}</div>`;
 }
 
 function attachEvents() {
