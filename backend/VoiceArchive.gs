@@ -38,6 +38,13 @@ function voiceArchiveClean_() {
 }
 
 // Install a daily time-based trigger for voiceArchiveClean_ during setup.
+function voiceArchiveInstallCleanup_() {
+  var existing = ScriptApp.getProjectTriggers().some(function(t) {
+    return t.getHandlerFunction() === 'voiceArchiveClean_';
+  });
+  if (!existing) ScriptApp.newTrigger('voiceArchiveClean_').timeBased().everyDays(1).create();
+}
+
 // The trigger executes under the Apps Script deployment account.
 function voiceArchiveStore_(arg, user) {
   voiceArchiveAccess_(user);
@@ -57,7 +64,7 @@ function voiceArchiveStore_(arg, user) {
   lock.waitLock(15000);
   try {
     voiceArchiveClean_();
-    voiceArchiveSheet_().appendRow([id, taskId, user, created.toISOString(), expires.toISOString(), keep, transcript]);
+    voiceArchiveSheet_().appendRow([id, taskId, user, created.toISOString(), expires.toISOString(), keep, "'" + transcript]);
   } finally { lock.releaseLock(); }
   return { ok: true, recordId: id, expiresAt: keep ? null : expires.toISOString(), keepOriginal: keep };
 }
