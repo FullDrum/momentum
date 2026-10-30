@@ -19,7 +19,7 @@
     var overlay=el('div',null,'voice-task-overlay');overlay.id='voice-task-overlay';
     var panel=el('div',null,'voice-task-panel');panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
     panel.appendChild(el('h3','🎤 '+node.name));
-    panel.appendChild(el('p','Prototype: short notes stay on this device. Originals require a configured server archive. No AI or email action is performed.','voice-muted'));
+    panel.appendChild(el('p','Prototype: reviewed memory and originals require a configured server archive. No AI or email action is performed.','voice-muted'));
     var transcript=el('textarea');transcript.placeholder='Speak or type your full instruction';transcript.setAttribute('aria-label','Instruction transcript');
     var summary=el('textarea');summary.placeholder='Keep all important points; remove repetition';summary.setAttribute('aria-label','Short task note');
     var controls=el('div',null,'voice-controls');
@@ -68,24 +68,37 @@
         });
       }).catch(function(err){archiveStatus.textContent='Archive unavailable: '+err.message;});
     });
-    function render(){history.replaceChildren();load(id).forEach(function(item){
-      var m=item.memory||{},lines=[new Date(item.at).toLocaleString()+' · '+item.text];
-      if(m.outcome)lines.push('Result: '+m.outcome);
-      if(m.nextAction)lines.push('Next: '+m.nextAction);
-      if(m.status)lines.push('Status: '+m.status);
-      history.appendChild(el('div',lines.join('\\n'),'voice-note'));
-    });}
+    function renderEntries(items){
+      history.replaceChildren();
+      items.forEach(function(item){
+        var m=item.memory||{},lines=[new Date(item.at).toLocaleString()+' · '+item.text];
+        if(m.outcome)lines.push('Result: '+m.outcome);
+        if(m.nextAction)lines.push('Next: '+m.nextAction);
+        if(m.status)lines.push('Status: '+m.status);
+        history.appendChild(el('div',lines.join('\n'),'voice-note'));
+      });
+    }
+    function render(){
+      archiveCall('voiceMemoryList',{taskId:id}).then(function(result){
+        if(activeTask===id)renderEntries(result.entries);
+      }).catch(function(err){
+        if(activeTask===id){renderEntries(load(id));status.textContent='Server memory unavailable; showing older local notes: '+err.message;}
+      });
+    }
     save.onclick=function(){
       var note=summary.value.trim();if(!note){status.textContent='Enter a short note first';return;}
       if(approval.checked&&!window.confirm('Save this note to local history?'))return;
       var original=transcript.value.trim();
       save.disabled=true;
       var archive=original ? archiveCall('voiceArchiveStore',{taskId:id,transcript:original,keepOriginal:false}) : Promise.resolve({ok:true});
-      archive.then(function(){
-        var a=load(id);var memory=window.MomentumTaskMemory.fromReviewedText(note,outcome.value,nextAction.value,state.value,null);
-        a.unshift({at:new Date().toISOString(),text:note,memory:memory});
-        localStorage.setItem(keyPrefix+id,JSON.stringify(a.slice(0,50)));
-        transcript.value='';summary.value='';outcome.value='';nextAction.value='';status.textContent='Saved short note locally'+(original?' and original in separate archive':'');render();
+      archive.then(function(archiveResult){
+        var memory=window.MomentumTaskMemory.fromReviewedText(note,outcome.value,nextAction.value,state.value,archiveResult.recordId||null);
+        var requestId=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(36).slice(2);
+        return archiveCall('voiceMemoryStore',{taskId:id,memory:memory,requestId:requestId,sourceRecordId:archiveResult.recordId||null}).then(function(){
+          transcript.value='';summary.value='';outcome.value='';nextAction.value='';
+          status.textContent='Saved task memory on server'+(original?' and original in separate archive':'');
+          render();
+        });
         if(archiveSection.open){archiveSection.open=false;archiveSection.open=true;}
       }).catch(function(err){status.textContent='Not saved. Archive error: '+err.message+'. Your text is still here.';})
       .finally(function(){save.disabled=false;});
