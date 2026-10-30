@@ -61,7 +61,7 @@
           keep.onchange=function(){
             keep.disabled=true;
             archiveCall('voiceArchiveKeep',{recordId:record.recordId,keepOriginal:keep.checked}).then(function(){
-              archiveSection.open=false;archiveSection.open=true;
+              archiveStatus.textContent='Retention preference updated. Close and reopen to refresh.';
             }).catch(function(err){keep.checked=!keep.checked;archiveStatus.textContent=err.message;}).finally(function(){keep.disabled=false;});
           };
           item.append(head,original,label);archiveItems.appendChild(item);
