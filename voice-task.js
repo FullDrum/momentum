@@ -18,9 +18,9 @@
     var overlay=el('div',null,'voice-task-overlay');overlay.id='voice-task-overlay';
     var panel=el('div',null,'voice-task-panel');panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
     panel.appendChild(el('h3','🎤 '+node.name));
-    panel.appendChild(el('p','Voice notes prototype: saved only on this device. No AI, MCP or email action is performed.','voice-muted'));
+    panel.appendChild(el('p','Voice notes prototype: retain every important detail, without repetition. Notes are saved only on this device; no AI, MCP or email action is performed.','voice-muted'));
     var transcript=el('textarea');transcript.placeholder='Speak or type your full instruction';transcript.setAttribute('aria-label','Instruction transcript');
-    var summary=el('textarea');summary.placeholder='1–3 key points to retain';summary.setAttribute('aria-label','Short task note');
+    var summary=el('textarea');summary.placeholder='Keep all important points; remove repetition';summary.setAttribute('aria-label','Short task note');
     var controls=el('div',null,'voice-controls');
     var mic=el('button','🎤 Speak');mic.type='button';var status=el('span','','voice-muted');
     var Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
