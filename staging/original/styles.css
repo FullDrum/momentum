@@ -330,3 +330,18 @@
   .kb-btn:active { background: var(--bg3); }
   .kb-btn-wide { flex: 2; }
   .kb-btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+/* The visual viewport shrinks above Android's keyboard; keep controls in flow. */
+body.is-mobile #app.app{position:fixed!important;left:0!important;top:var(--momentum-viewport-top,0px)!important;width:100%!important;height:var(--momentum-viewport-height,100dvh)!important;min-height:0!important;max-height:var(--momentum-viewport-height,100dvh)!important}
+body.is-mobile #treeEl{min-height:0;overscroll-behavior:contain}
+body.is-mobile .toolbar{overflow-x:auto;flex-shrink:0;scrollbar-width:thin}
+body.is-mobile #kbBar{flex-shrink:0}body.is-mobile #kbBar button:disabled{opacity:.35}
+body.is-mobile.keyboard-open #app .toolbar{height:46px!important;min-height:46px!important;max-height:46px!important;font-size:14px!important;padding:4px!important}
+body.is-mobile.keyboard-open #app .toolbar button{font-size:16px!important;min-height:36px!important;padding:5px 8px!important;flex-shrink:0}
+body.is-mobile.keyboard-open #mobileNav,body.is-mobile.keyboard-open #mobileNav .mobile-nav-inner{height:46px!important;min-height:46px!important;max-height:46px!important;flex-shrink:0!important}
+body.is-mobile.keyboard-open #mobileNav .mobile-nav-btn{font-size:10px!important;gap:2px!important;padding:3px!important}
+body.is-mobile.keyboard-open #mobileNav .mobile-nav-btn svg{width:18px!important;height:18px!important}
+body.is-mobile.keyboard-open #mobileFab{display:none!important}
+body.is-mobile.keyboard-open #treeEl{padding-bottom:12px!important;scroll-padding-bottom:12px}
+body.is-mobile.keyboard-open #kbBar.active{display:flex!important;min-height:44px;max-height:48px;overflow-x:auto;gap:3px;padding:3px}
+body.is-mobile.keyboard-open .task-chat-log{max-height:56px}

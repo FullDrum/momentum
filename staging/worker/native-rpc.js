@@ -13,7 +13,7 @@ export async function nativeRpc(repo,owner,body,relations){
  if(body.fn==='whoAmI')return {email:owner,environment:'isolated-staging'};
  if(body.fn==='getPeople')return {people:[]};if(body.fn==='getTeamMembers')return [];
  if(body.fn==='getInitialData'){
-  const snapshot=await repo.read(owner);return {user:owner,nodes:snapshot.state.tasks,treeToken:await outlineToken(snapshot.state.tasks)};
+  const snapshot=await repo.read(owner);return {user:owner,nodes:snapshot.state.tasks.map(t=>({...t,...(!t.isSection?{retainEmpty:true}:{}),hasConversation:t.conversationStarted===true||(snapshot.state.messages||[]).some(m=>m.taskId===t.id)||(snapshot.state.notes||[]).some(n=>n.taskId===t.id)})),treeToken:await outlineToken(snapshot.state.tasks)};
  }
  if(body.fn!=='batchOps')fail(403,'This collaboration or management action is not enabled in isolated staging.');
  const requestId=id(body.requestId),arg=body.arg;
@@ -27,7 +27,7 @@ export async function nativeRpc(repo,owner,body,relations){
   const deletes=new Set(arg.deletes.map(id));state.tasks=state.tasks.filter(t=>!deletes.has(t.id));
   for(const raw of arg.saves){
    if(!raw||typeof raw!=='object')fail(400,'Invalid task');const taskId=id(raw.id);if(deletes.has(taskId))fail(400,'Conflicting task batch');
-   const task={id:taskId,name:text(raw.name??'','task name'),parentId:raw.parentId==null||raw.parentId===''?null:id(raw.parentId),owner,isSection:!!raw.isSection,done:!!raw.done};
+   const task={id:taskId,name:text(raw.name??'','task name'),parentId:raw.parentId==null||raw.parentId===''?null:id(raw.parentId),owner,isSection:!!raw.isSection,done:!!raw.done,...(!raw.isSection?{retainEmpty:true}:{}),...(raw.conversationStarted===true?{conversationStarted:true}:{})};
    for(const key of ['date','completedDate','order','watching','assignedTo','assignedBy','assigneePersonId','sharedWith'])if(raw[key]!==undefined)task[key]=raw[key];
    if(task.date!=null&&(typeof task.date!=='string'||task.date.length>50))fail(400,'Invalid task date');
    if(task.order!=null&&!Number.isFinite(task.order))fail(400,'Invalid task order');

@@ -647,9 +647,11 @@ function getDescendantIds(id) {
 }
 
 // ── Node helpers ──────────────────────────────────────────────────────────────
+function keepEmptyNode(n) { return !!n && !n.isSection && (n.retainEmpty === true || !!window.MomentumStaging); }
+
 function normalizeNodes(raw) {
   return raw
-    .filter(n => n.name && String(n.name).trim() !== '')
+    .filter(n => (n.name && String(n.name).trim() !== '') || keepEmptyNode(n))
     .map(n => {
       if (n.date) {
         var s = String(n.date).trim();
@@ -727,16 +729,16 @@ function visibleList() {
   if (activeTab === 'today') tasks = nodes.filter(n =>
     !n.isSection &&
     ((!n.watching && n.date && n.date.slice(0,10) === TODAY) || (showWatchedToday && n.watching)) &&
-    (n.name && n.name.trim() || n.id === focusId) &&
+    (n.name && n.name.trim() || n.id === focusId || keepEmptyNode(n)) &&
     doneFilter(n)
   );
   else if (activeTab === 'all') tasks = nodes.filter(n =>
     !n.isSection &&
     (!n.watching || showWatchedAll) &&
-    (n.name && n.name.trim() || n.id === focusId) &&
+    (n.name && n.name.trim() || n.id === focusId || keepEmptyNode(n)) &&
     doneFilter(n)
   );
-  else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId) && doneFilter(n));
+  else tasks = nodes.filter(n => !n.isSection && n.assignedTo === currentUser && (n.name && n.name.trim() || n.id === focusId || keepEmptyNode(n)) && doneFilter(n));
   // Today/All Tasks order by tree position (so drag reorder is visible); the
   // date headers still group them in render(). Assigned stays date-sorted.
   if (activeTab === 'today' || activeTab === 'all') {
@@ -755,7 +757,7 @@ function visibleList() {
   function visibleChild(c, parent) {
     // Watched rows form a separate list in Today and All Tasks.
     if ((activeTab === 'all' || activeTab === 'today') && !!c.watching !== !!parent.watching) return false;
-    return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId) && doneFilter(c);
+    return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId || keepEmptyNode(c)) && doneFilter(c);
   }
 
   function belongsUnderMatchedAncestor(n) {
@@ -797,6 +799,10 @@ function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo =
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(preserveScroll) {
+  // In staging an empty task is a real ID-bearing record, not a disposable editor.
+  if (window.MomentumStaging) nodes.forEach(function(n) {
+    if (!n.isSection && n.retainEmpty !== true) { n.retainEmpty = true; scheduleSave(n); }
+  });
   if (window.MomentumConversations) window.MomentumConversations.beforeRender();
   var el = document.getElementById('treeEl');
   if (!el) return;
@@ -1043,8 +1049,8 @@ function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
     : `<input type="checkbox" class="node-check" data-check="${n.id}" ${n.done ? 'checked' : ''} ${!canEdit(n) ? 'disabled' : ''} />`;
   var cls = ['node-input', !n.isSection && n.done ? 'done' : '', n.isSection ? 'is-section' : '', !canEdit(n) ? '' : ''].filter(Boolean).join(' ');
   var dispCls = ['node-display', !n.isSection && n.done ? 'done' : '', n.isSection ? 'is-section' : '', !canEdit(n) ? 'readonly' : ''].filter(Boolean).join(' ');
-  var placeholder = n.isSection ? 'Section / group name...' : 'Task...';
-  var displayContent = n.name ? renderMarkdown(n.name) : '<span style="color:var(--text3);font-style:italic;">' + placeholder + '</span>';
+  var placeholder = n.isSection ? 'Section / group name...' : keepEmptyNode(n) ? 'New task' : 'Task...';
+  var displayContent = n.name && n.name.trim() ? renderMarkdown(n.name) : '<span style="color:var(--text3);font-style:italic;">' + placeholder + '</span>';
   var inputEl = '<div class="' + dispCls + '" id="disp_' + n.id + '" data-disp="' + n.id + '">' + displayContent + '</div>' +
     '<textarea class="' + cls + '" id="inp_' + n.id + '" data-id="' + n.id + '" data-flat="' + flat + '" ' + (!canEdit(n) ? 'readonly' : '') + ' placeholder="' + placeholder + '" rows="1">' + esc(n.name) + '</textarea>' +
     '<button class="mobile-show-more" data-showmore="' + n.id + '" title="Show full text">···</button>';
@@ -1330,6 +1336,7 @@ function attachEvents() {
       if (n) {
         n.name = inp.value; // keep in-memory name always current
         touchNode(n.id);    // protect from reconcile clobber
+        if (keepEmptyNode(n)) scheduleSave(n); // persist staged edits before blur/reload
       }
       // Smart undo: push undo checkpoint at word boundaries
       var val = inp.value;
@@ -1354,11 +1361,12 @@ function attachEvents() {
       if (!n) return;
       // Always capture the live input value into the node
       var live = inp.value;
-      if (live.trim()) n.name = live;
+      if (live.trim() || keepEmptyNode(n)) n.name = live;
       // Switch back to display mode
       var disp = document.getElementById('disp_' + inp.dataset.id);
       switchToDisplay(inp, disp);
       if (!n.name || !n.name.trim()) {
+        if (keepEmptyNode(n)) { scheduleSave(n); return; }
         if (!n.order) {
           nodes = nodes.filter(x => x.id !== n.id);
           render();
@@ -1424,7 +1432,7 @@ function handleKey(e, inp) {
   if (e.key === 'Enter' && !e.shiftKey && !e.repeat && (e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) {
+    if (cur.name.trim() || keepEmptyNode(cur)) {
       scheduleSave(cur);
     }
     showCombinedPicker(cur);
@@ -1435,7 +1443,7 @@ function handleKey(e, inp) {
   if (e.key === 'Enter' && e.shiftKey && !e.repeat && (e.ctrlKey || e.metaKey) && !e.altKey) {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) {
+    if (cur.name.trim() || keepEmptyNode(cur)) {
       scheduleSave(cur);
     }
     openPeopleChooser({
@@ -1450,7 +1458,7 @@ function handleKey(e, inp) {
   if (e.key === 'Enter' && !e.shiftKey && e.altKey) {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) scheduleSave(cur);
+    if (cur.name.trim() || keepEmptyNode(cur)) scheduleSave(cur);
     // Find or use first section named "General" (case-insensitive)
     var generalSection = nodes.find(function(n) {
       return n.isSection && n.name && n.name.toLowerCase().trim() === 'general';
@@ -1470,7 +1478,7 @@ function handleKey(e, inp) {
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
-    if (cur.name.trim()) {
+    if (cur.name.trim() || keepEmptyNode(cur)) {
       scheduleSave(cur);
     }
     var parentNode = cur.parentId ? nodes.find(function(x) { return x.id === cur.parentId; }) : null;
@@ -1524,7 +1532,7 @@ function handleKey(e, inp) {
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
-    if (cur.name.trim()) {
+    if (cur.name.trim() || keepEmptyNode(cur)) {
       scheduleSave(cur);
     }
     var si = nodes.findIndex(x => x.id === id);
@@ -1553,7 +1561,7 @@ function handleKey(e, inp) {
     e.preventDefault();
     pushUndo();
     cur.name = inp.value;
-    if (cur.name.trim()) {
+    if (cur.name.trim() || keepEmptyNode(cur)) {
       scheduleSave(cur);
     }
     var hasChildren = nodes.some(x => x.parentId === cur.id);
@@ -1592,6 +1600,7 @@ function handleKey(e, inp) {
   // ── Backspace on empty: delete node ─────────────────────────
   if (e.key === 'Backspace' && inp.value === '') {
     e.preventDefault();
+    if (cur.hasConversation) { showStatusBanner('This task has a conversation. Use Delete to remove it explicitly.', 'error'); return; }
     pushUndo();
     var prevNode = vi > 0 ? list[vi - 1].node : null;
     var snapIds = [id, ...descendants(id)];
@@ -1606,14 +1615,14 @@ function handleKey(e, inp) {
   if (e.key === 'ArrowUp') {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) scheduleSave(cur);
+    if (cur.name.trim() || keepEmptyNode(cur)) scheduleSave(cur);
     if (vi > 0) { focusId = list[vi - 1].node.id; render(); }
     return;
   }
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     cur.name = inp.value;
-    if (cur.name.trim()) scheduleSave(cur);
+    if (cur.name.trim() || keepEmptyNode(cur)) scheduleSave(cur);
     if (vi < list.length - 1) { focusId = list[vi + 1].node.id; render(); }
     return;
   }
@@ -2723,7 +2732,7 @@ function highlightText(text, query) {
 }
 
 function conversationButtonHTML(n) {
-  return !n.isSection ? '<button type="button" class="task-chat-btn" data-task-chat="' + esc(n.id) + '" title="Task conversation" aria-label="Conversation for ' + esc(n.name) + '" aria-expanded="false">🎤</button>' : '';
+  return !n.isSection ? '<button type="button" class="task-chat-btn" data-task-chat="' + esc(n.id) + '" title="Task conversation" aria-label="Conversation for ' + esc(n.name && n.name.trim() ? n.name : 'New task') + '" aria-expanded="false">🎤</button>' : '';
 }
 
 function searchRowHTML(n) {
@@ -3718,7 +3727,7 @@ function assignTo(node, email) {
 function saveActiveInput() {
   // Save whatever the user is currently typing before any disruptive operation
   var inp = document.activeElement;
-  if (inp && inp.classList.contains('node-input') && inp.value.trim()) {
+  if (inp && inp.classList.contains('node-input') && (inp.value.trim() || window.MomentumStaging)) {
     var n = nodes.find(function(x) { return x.id === inp.dataset.id; });
     if (n) {
       n.name = inp.value.trim();

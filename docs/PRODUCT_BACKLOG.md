@@ -41,3 +41,7 @@ Implemented on `dev/voice-capture-structure-milestone`: owner-private HTTPS stag
 ## Architectural correction — outliner-first staging
 
 The existing Momentum outliner is the product foundation. The standalone staging capture dashboard is removed. Contextual voice/text panels now sit under existing task rows, with persistent ID-bound history and reviewed changes. Preserve native Today/hierarchy/keyboard/mobile workflows. Provider credentials and physical Android verification remain prerequisites for live AI/audio acceptance. See `OUTLINER_STAGING_REPORT.md`.
+
+## Blank-task, audio and keyboard correction
+
+Staging retains untitled task IDs through blur, queue/reload and conversation recovery; the UI uses a New task placeholder. The normal conversation panel is compact, language selection is removed, and recorded clips use a server-only OpenAI transcription adapter with automatic language detection. Mobile viewport handling keeps editing controls above the keyboard. See `BLANK_AUDIO_MOBILE_REPORT.md` for results and the provider/physical-device blockers.

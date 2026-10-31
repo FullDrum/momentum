@@ -7,7 +7,7 @@ export function conversationState(snapshot,taskId,env={}){
  const legacy=(state.notes||[]).filter(n=>n.taskId===taskId).map(n=>({id:'legacy_'+n.id,role:'legacy',content:n.transcript||n.memory.summary,at:n.at,taskId}));
  const messages=legacy.concat(history).sort((a,b)=>a.at.localeCompare(b.at));
  const lastUser=history.filter(m=>m.role==='user').at(-1),reply=lastUser&&history.find(m=>m.replyTo===lastUser.id);
- return {taskId,messages,aiStatus:reply?reply.status:env.OPENAI_API_KEY?'ready':'unconfigured',retryMessageId:lastUser&&(!reply||reply.status==='failed'||reply.status==='pending'&&Date.now()-Date.parse(reply.at)>=90000)?lastUser.id:null};
+ return {taskId,messages,transcriptionAvailable:!!env.OPENAI_API_KEY,aiStatus:reply?reply.status:env.OPENAI_API_KEY?'ready':'unconfigured',retryMessageId:lastUser&&(!reply||reply.status==='failed'||reply.status==='pending'&&Date.now()-Date.parse(reply.at)>=90000)?lastUser.id:null};
 }
 async function mutateConversation(repo,owner,change){
  for(let attempt=0;attempt<5;attempt++){

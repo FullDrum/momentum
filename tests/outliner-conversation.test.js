@@ -67,3 +67,30 @@ test('staging is built from canonical outliner files and strips production endpo
  for(const file of ['index.html','app.js','styles.css','core.js','task-conversation.js','task-conversation.css'])assert.equal(fs.readFileSync(file,'utf8'),fs.readFileSync('staging/original/'+file,'utf8'));
  const worker=fs.readFileSync('staging/dist/server/index.js','utf8');assert.doesNotMatch(worker,/script\.google\.com|accounts\.google\.com|apps\.googleusercontent\.com/);assert.match(worker,/mobileNav/);assert.match(worker,/Momentum – Staging Outliner/);
 });
+
+test('blank task and its conversation round-trip through the native backend with stable IDs',async()=>{
+ const {repo}=await setup(),{nativeRpc}=await native,{saveMessage,conversationState}=await chat;
+ const before=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);
+ await nativeRpc(repo,'alice',{fn:'batchOps',requestId:'blank_create',expectedTree:before.treeToken,arg:{saves:[{id:'blank',name:'',parentId:null,isSection:false,conversationStarted:true}],deletes:[]}},relations);
+ await saveMessage(repo,'alice',{taskId:'blank',text:'Start planning without a title',requestId:'blank_message'});
+ const reload=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);assert.equal(reload.nodes[0].id,'blank');assert.equal(reload.nodes[0].name,'');assert.equal(reload.nodes[0].retainEmpty,true);assert.equal(reload.nodes[0].hasConversation,true);
+ assert.equal(conversationState(await repo.read('alice'),'blank').messages[0].content,'Start planning without a title');
+});
+test('transcription endpoint uses automatic language detection and keeps credentials server-only',async()=>{
+ const {repo}=await setup(),{transcribeAudio}=await import('../staging/worker/transcription.js');await seed(repo);
+ const request=()=>new Request('https://staging.test/api/transcribe?taskId=freight',{method:'POST',headers:{'content-type':'audio/webm'},body:new Uint8Array([1,2,3])});
+ let calls=0;const fetcher=async(url,options)=>{calls++;assert.equal(url,'https://api.openai.com/v1/audio/transcriptions');assert.equal(options.headers.authorization,'Bearer test-key');assert.equal(options.body.has('language'),false);assert.equal(options.body.get('model'),'gpt-4o-mini-transcribe');assert.equal((await options.body.get('file').arrayBuffer()).byteLength,3);return Response.json({text:'Привет. Freight tomorrow.'});};
+ const result=await transcribeAudio(request(),{OPENAI_API_KEY:'test-key'},'alice',repo,fetcher);assert.deepEqual(result,{text:'Привет. Freight tomorrow.'});assert.equal(calls,1);
+ await assert.rejects(transcribeAudio(request(),{},'alice',repo,fetcher),/not connected/);
+ await assert.rejects(transcribeAudio(request(),{OPENAI_API_KEY:'test-key'},'bob',repo,fetcher),/Task not found/);
+ const invalid=new Request('https://staging.test/api/transcribe?taskId=freight',{method:'POST',headers:{'content-type':'text/plain'},body:'bad'});await assert.rejects(transcribeAudio(invalid,{OPENAI_API_KEY:'test-key'},'alice',repo,fetcher),/Unsupported recording/);
+ assert.equal((await repo.read('alice')).state.messages?.length||0,0);
+});
+test('transcription failures, empty audio and oversized requests fail safely',async()=>{
+ const {repo}=await setup(),{transcribeAudio}=await import('../staging/worker/transcription.js');await seed(repo);
+ const req=body=>new Request('https://staging.test/api/transcribe?taskId=freight',{method:'POST',headers:{'content-type':'audio/webm'},body});
+ await assert.rejects(transcribeAudio(req(new Uint8Array()),{OPENAI_API_KEY:'test-key'},'alice',repo),/Empty recording/);
+ await assert.rejects(transcribeAudio(req(new Uint8Array([1])),{OPENAI_API_KEY:'test-key'},'alice',repo,async()=>new Response('',{status:429})),/service unavailable/);
+ await assert.rejects(transcribeAudio(req(new Uint8Array([1])),{OPENAI_API_KEY:'test-key'},'alice',repo,async()=>Response.json({text:''})),/No speech/);
+ const large=new Request('https://staging.test/api/transcribe?taskId=freight',{method:'POST',headers:{'content-type':'audio/webm','content-length':String(11*1024*1024)},body:'x'});await assert.rejects(transcribeAudio(large,{OPENAI_API_KEY:'test-key'},'alice',repo),/too large/);
+});

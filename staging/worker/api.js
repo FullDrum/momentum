@@ -1,3 +1,4 @@
+import {transcribeAudio} from './transcription.js';
 import {nativeRpc} from './native-rpc.js';
 import {conversationState,saveMessage,answerMessage} from './conversations.js';
 /* Isolated staging API. Platform authentication + per-account storage. No Google calls. */
@@ -94,6 +95,7 @@ export async function handleApi(request,env,relations){
   }
   if(request.method!=='POST')fail(405,'Method not allowed');
   if(request.headers.get('origin')!==url.origin)fail(403,'Same-origin request required');
+  if(url.pathname==='/api/transcribe')return json(await transcribeAudio(request,env,owner,new StagingRepository(env.DB)));
   if(!(request.headers.get('content-type')||'').toLowerCase().startsWith('application/json'))fail(415,'JSON required');
   const limit=url.pathname==='/api/rpc'?1000000:40000;
   if(Number(request.headers.get('content-length')||0)>limit)fail(413,'Request too large');

@@ -43,7 +43,12 @@
  };
  window.MomentumConversationAPI={
   account:function(){return accountId;},
-  load:async function(taskId){return api('conversation?taskId='+encodeURIComponent(taskId));},
+  load:async function(taskId){await window.MomentumStaging.sync();return api('conversation?taskId='+encodeURIComponent(taskId));},
+  transcribe:async function(taskId,blob,requestId,signal){
+   await window.MomentumStaging.sync();
+   var response=await fetch('/api/transcribe?taskId='+encodeURIComponent(taskId),{method:'POST',credentials:'same-origin',headers:{'content-type':blob.type},body:blob,signal:signal});
+   var data=await response.json();if(!response.ok)throw new Error(data.error||'Transcription failed');return data;
+  },
   send:async function(taskId,text,requestId){await window.MomentumStaging.sync();return api('message',{taskId:taskId,text:text,requestId:requestId});},
   retry:async function(taskId,messageId){return api('reply',{taskId:taskId,messageId:messageId});},
   preview:async function(taskId,kind,targetId,title){await window.MomentumStaging.sync();return api('preview',{taskId:taskId,kind:kind,targetId:targetId,title:title});},

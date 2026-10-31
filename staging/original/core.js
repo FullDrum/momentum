@@ -23,8 +23,12 @@
     }
   }
 
+  function retainableNode(node) {
+    return !!node && (!!(node.name && String(node.name).trim()) || (node.retainEmpty === true && !node.isSection));
+  }
+
   function enqueueSave(queue, node) {
-    if (!node || !node.id || !node.name || !String(node.name).trim()) return false;
+    if (!node || !node.id || !retainableNode(node)) return false;
     if (queue.deletes[node.id]) return false;
     queue.saves[node.id] = Object.assign({}, node);
     return true;
@@ -118,7 +122,7 @@
     targetNodes.forEach(function(n) { target[n.id] = n; });
     return {
       saves: targetNodes.filter(function(n) {
-        return n.name && String(n.name).trim() && (!current[n.id] || nodeChanged(current[n.id], n));
+        return retainableNode(n) && (!current[n.id] || nodeChanged(current[n.id], n));
       }),
       deletes: currentNodes.filter(function(n) { return !target[n.id]; })
     };
@@ -134,10 +138,11 @@
       if (!raw || typeof raw !== 'object') throw new Error('Invalid item');
       var id = String(raw.id || '').trim();
       var name = String(raw.name || '').trim();
-      if (!id || !name || seen[id]) throw new Error('Invalid or duplicate item');
+      if (!id || !retainableNode(raw) || seen[id]) throw new Error('Invalid or duplicate item');
       seen[id] = true;
       return {
         id: id, name: name, parentId: raw.parentId ? String(raw.parentId) : null,
+        ...(raw.retainEmpty === true && !raw.isSection ? {retainEmpty: true} : {}),
         isSection: raw.isSection === true || raw.isSection === 'true',
         done: raw.done === true || raw.done === 'true',
         watching: raw.watching === true || raw.watching === 'true',

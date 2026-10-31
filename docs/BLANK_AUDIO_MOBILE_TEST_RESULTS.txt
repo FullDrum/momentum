@@ -1,0 +1,26 @@
+Momentum Next blank/audio/mobile corrections — 31 October 2026 (Pacific/Auckland)
+
+Node 22.23.4: npm test
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 502.631025
+
+Staging integration (synthetic recordings and mocked OpenAI responses; emulated keyboard viewport)
+PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; blank-task ID persistence and offline reload; automatic-language final audio transcription; keyboard-open/closed viewport controls; zero external requests/page errors.
+
+Canonical shell/PWA and historical prototype regression
+PASS: shared demo; cumulative speech; draft recovery; text save; suggestions; reviewed move/link; cycle rejection; quota recovery; mobile layout; no speech fallback; zero external requests; zero page errors.
+PASS: canonical application shell and inline conversation module; no capture dashboard.
+PASS: updated service-worker assets, sandbox navigation isolation and offline outliner shell.
+
+Hosted version 3 deployment: succeeded
+Access: owner-private, one allowed owner, no groups
+
+No live provider key is configured. Physical Android keyboard/audio, real Russian/English recognition and signed-in deployed API tests remain manual.

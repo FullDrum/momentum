@@ -114,3 +114,12 @@ test('renderMarkdown renders safe links, escapes labels, and keeps formatting', 
   // A quote inside a URL is not rendered as a link (sanitised away to text).
   assert.equal(core.renderMarkdown('[x](https://a.com/")'), '[x](https://a.com/&quot;)');
 });
+
+test('retained blank tasks survive queue, overlay, undo restore and backup without inventing a title', () => {
+  const task = {id:'blank',name:'',isSection:false,parentId:null,retainEmpty:true};
+  const queue = core.emptyQueue();assert.equal(core.enqueueSave(queue,task),true);
+  const recovered=core.restoreQueue(JSON.stringify(queue));assert.equal(core.overlayQueue([],recovered)[0].name,'');
+  assert.equal(core.diffForRestore([], [task]).saves[0].id,'blank');
+  const backup=core.validateBackup({format:'momentum-backup',version:1,nodes:[task]},'alice');assert.equal(backup[0].name,'');assert.equal(backup[0].retainEmpty,true);
+  assert.equal(core.enqueueSave(core.emptyQueue(),{id:'transient',name:''}),false);
+});

@@ -1,3 +1,5 @@
+> Updated by `BLANK_AUDIO_MOBILE_REPORT.md`: staging version 3 adds retained blank tasks, final server audio transcription and keyboard-aware mobile controls.
+
 # Momentum Next — outliner-first staging correction
 
 31 October 2026 · Pacific/Auckland

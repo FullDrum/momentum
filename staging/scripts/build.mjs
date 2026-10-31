@@ -17,13 +17,13 @@ const assets={
  '/voice-capture.js':{type:'text/javascript',content:read('shared/voice-capture.js')},
  '/task-relations.js':{type:'text/javascript',content:read('shared/task-relations.js')}
 };
-for(const file of ['core.js','task-memory.js','task-conversation.js','styles.css','task-conversation.css','manifest.json'])assets['/'+file]={type:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'application/json',content:read('original/'+file)};
+for(const file of ['mobile-viewport.js','audio-capture.js','core.js','task-memory.js','task-conversation.js','styles.css','task-conversation.css','manifest.json'])assets['/'+file]={type:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'application/json',content:read('original/'+file)};
 for(const file of ['icon-192.png','icon-512.png'])assets['/'+file]={type:'image/png',binary:true,content:fs.readFileSync(path.join(root,'original',file)).toString('base64')};
 // The original application uses inline event handlers and dynamic element styles.
 const security={'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'same-origin','permissions-policy':'microphone=(self), camera=(), geolocation=()',
  'content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"};
 const bundle=file=>read(file).replace(/^import .*;\n/gm,'');
-const worker=read('shared/task-relations.js')+'\n'+bundle('worker/api.js')+'\n'+bundle('worker/native-rpc.js')+'\n'+bundle('worker/conversations.js')+'\nconst assets='+JSON.stringify(assets)+';\nconst security='+JSON.stringify(security)+`;\nexport default {async fetch(request,env){
+const worker=read('shared/task-relations.js')+'\n'+bundle('worker/api.js')+'\n'+bundle('worker/native-rpc.js')+'\n'+bundle('worker/conversations.js')+'\n'+bundle('worker/transcription.js')+'\nconst assets='+JSON.stringify(assets)+';\nconst security='+JSON.stringify(security)+`;\nexport default {async fetch(request,env){
  const url=new URL(request.url);let response;
  if(url.pathname.startsWith('/api/'))response=await handleApi(request,env,globalThis.MomentumTaskRelations);
  else if(assets[url.pathname]&&['GET','HEAD'].includes(request.method)){const asset=assets[url.pathname];const content=asset.binary?Uint8Array.from(atob(asset.content),c=>c.charCodeAt(0)):asset.content;response=new Response(request.method==='HEAD'?null:content,{headers:{'content-type':asset.type}});}

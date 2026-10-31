@@ -417,3 +417,14 @@ test('newly synced children stay under a local parent whose watching flag is uns
   assert.deepEqual(rows.map(row => [row.id, row.depth]), [['parent', 0], ['child', 1]]);
   assert.equal(rows[0].hasChildren, true);
 });
+
+test('retained empty tasks remain visible and reload without a title', () => {
+  const c=app();c.activeTab='today';c.focusId=null;
+  const blank=Object.assign(node('blank','',null,'2026-09-19 10:00:00'),{retainEmpty:true,hasConversation:true});
+  c.nodes=c.normalizeNodes([blank]);assert.equal(c.nodes.length,1);assert.equal(c.nodes[0].name,'');assert.equal(c.visibleList()[0].node.id,'blank');
+  assert.match(c.rowHTML(c.nodes[0],0,true),/New task/);
+});
+test('Backspace on an empty conversation task does not silently delete it', () => {
+  const c=app();c.activeTab='today';c.focusId='blank';c.nodes=[Object.assign(node('blank','',null,'2026-09-19 10:00:00'),{retainEmpty:true,hasConversation:true})];
+  c.handleKey({key:'Backspace',preventDefault(){}},{dataset:{id:'blank'},value:''});assert.equal(c.nodes.length,1);
+});

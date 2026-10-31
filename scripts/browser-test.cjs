@@ -78,8 +78,8 @@ const server=http.createServer((req,res)=>{
   await offline.route('**/*',route=>route.request().url().startsWith(base+'/')?route.continue():route.abort());
   const cachedPage=await offline.newPage();await cachedPage.goto(base+'/');
   await cachedPage.waitForEvent('load');await cachedPage.waitForFunction(()=>navigator.serviceWorker.controller);
-  const assets=await cachedPage.evaluate(async()=>{const cache=await caches.open('momentum-v40');return (await cache.keys()).map(r=>new URL(r.url).pathname);});
-  for(const asset of ['/task-conversation.js','/voice-capture.js','/task-conversation.css','/task-relations.js'])assert.ok(assets.includes(asset),asset);
+  const assets=await cachedPage.evaluate(async()=>{const cache=await caches.open('momentum-v41');return (await cache.keys()).map(r=>new URL(r.url).pathname);});
+  for(const asset of ['/task-conversation.js','/audio-capture.js','/mobile-viewport.js','/task-conversation.css','/task-relations.js'])assert.ok(assets.includes(asset),asset);
   await cachedPage.goto(base+'/prototypes/task-structure-live.html');
   await offline.setOffline(true);await cachedPage.goto(base+'/');
   assert.equal(await cachedPage.title(),'Momentum – Task Manager');

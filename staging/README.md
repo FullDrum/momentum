@@ -62,3 +62,29 @@ Physical Android audio, real provider replies and signed-in live-site API writes
 ## Limits
 
 Owner-private staging only; no worker sharing, full collaboration management, production migration or destructive AI merges. Unsaved drafts stay local; only sent messages sync. Browser speech may use a remote provider; Momentum stores text and does not record audio. Limits: 1,000 tasks, 2,000 legacy notes, 4,000 conversation records and a 2 MB account snapshot. The last 500 structure approvals are retained. No automatic expiry, deletion/backup UI or full concurrent-edit merge protocol is implemented; use development content.
+
+## Blank tasks, final audio and Android keyboard — current correction
+
+The current interface no longer uses browser speech recognition or a language selector. The microphone records one clip with `MediaRecorder`; stopping it requests one final OpenAI transcription from authenticated `POST /api/transcribe`. The server omits a language parameter so supported languages, including Russian and English, are detected automatically. Model default: `gpt-4o-mini-transcribe`; optional server-only `OPENAI_TRANSCRIPTION_MODEL` can select `gpt-4o-transcribe` or `whisper-1`.
+
+This supersedes the earlier browser-recognition description above. The normal panel contains the most recent three messages, text entry, microphone, Send and Close. Earlier history/options and suggestions/task structure remain collapsed until opened.
+
+**The credential blocker is unchanged:** no `OPENAI_API_KEY` is configured on this Site. Consequently live transcription and AI replies are unavailable. The interface disables recording when transcription is disconnected, explains the text fallback, and never substitutes browser recognition. The integrated endpoint and recording lifecycle are tested with simulated clips/provider responses. Configure the key as a server runtime secret using the supported OpenAI Developers workflow, then publish a version to apply it. No credential is present in client assets.
+
+Audio handling: HTTPS/localhost microphone permission is required. Limit: 60 seconds and 10 MB per clip. The server validates identity, task ownership, origin, MIME type and streamed byte limit, then uploads the clip to OpenAI using a server-only Authorization header. It stores no audio. Empty/provider-failed results keep typed text intact. A failed recording upload can be retried while the panel remains open; closing/cancelling discards the in-memory clip. A network retry can issue another provider request, but the controller applies a successful final result only once. Clips and actual recognition accuracy were not tested on a physical phone.
+
+Blank-task lifecycle:
+
+| Path | Current behavior |
+| --- | --- |
+| Creation | A title-independent task ID is assigned; staging immediately queues the task with `retainEmpty: true`. |
+| Typing / blur | Staging persists every edit to the local queue, including an empty title; blur does not remove retained tasks. |
+| Start conversation | `conversationStarted` is queued; the task syncs before loading/sending history. If offline, its ID and draft remain local. |
+| Today / All Tasks / reload | Visibility and normalization preserve retained tasks. “New task” is a placeholder; the stored title can remain empty. |
+| Queue, undo restoration, backup | Core helpers accept explicitly retained blank tasks without inventing a title. |
+| Empty Backspace | Conversation-bearing tasks are protected; use the explicit Delete action. Explicit deletes retain server history for later restoration of the same ID. |
+| Offline / reconnect | Pending task writes and conversation drafts survive in browser storage and replay by stable ID after reconnect/reload. The private staging shell still needs a network connection to load. |
+
+`mobile-viewport.js` sizes the existing flex outliner to `visualViewport.height` and its offset. While the keyboard is open, the toolbar becomes compact and horizontally scrollable, navigation contracts, and indent/outdent plus a native add-task control remain in the accessory bar above the keyboard. The floating plus is hidden only in this mode because its replacement is in flow. The tree scrolls the active editor or chat composer into view. During chat, task-indent controls are disabled to avoid treating a chat message as an outline command; Add and Done remain available. When the keyboard closes, the original navigation/toolbar layout returns.
+
+Automated tests emulate keyboard-open/closed visual viewport sizes and exercise the above-keyboard Add action. They do not open a real Android IME. On a physical Android Chrome device, verify keyboard open/closed, task typing, indent/outdent, Add, horizontal toolbar access, chat typing, rotation and returning from a permission prompt. Record device/Android/Chrome versions. Real microphone, Russian/English transcription and keyboard checks remain manual acceptance items.
