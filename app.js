@@ -507,6 +507,7 @@ function isTokenValid() {
 }
 
 function signInWithGoogle() {
+  if (window.MomentumStaging) return window.MomentumStaging.signIn();
   syncAccountReady = false;
   mlog('signInWithGoogle: invoked. GSI loaded?', typeof google !== 'undefined' && !!(google.accounts && google.accounts.oauth2));
   if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
@@ -559,6 +560,7 @@ function showApp() {
 
 // ── API call — replaces google.script.run ─────────────────────────────────────
 function gsr(fnName, arg) {
+  if (window.MomentumStaging) return window.MomentumStaging.rpc(fnName, arg);
   return new Promise(function(resolve, reject) {
     var googleTokenValid = isTokenValid();
     var hasSession = !!_momentumSessionToken;
@@ -752,7 +754,7 @@ function visibleList() {
 
   function visibleChild(c, parent) {
     // Watched rows form a separate list in Today and All Tasks.
-    if ((activeTab === 'all' || activeTab === 'today') && c.watching !== parent.watching) return false;
+    if ((activeTab === 'all' || activeTab === 'today') && !!c.watching !== !!parent.watching) return false;
     return !c.isSection && ((c.name && c.name.trim()) || c.id === focusId) && doneFilter(c);
   }
 
@@ -795,6 +797,7 @@ function canEdit(n) { return !n.readOnlyContext && (isOwner(n) || n.assignedTo =
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(preserveScroll) {
+  if (window.MomentumConversations) window.MomentumConversations.beforeRender();
   var el = document.getElementById('treeEl');
   if (!el) return;
   el.setAttribute('aria-busy', 'false');
@@ -811,6 +814,7 @@ function render(preserveScroll) {
   // If search is open with a query, show search results instead
   if (searchOpen && searchQuery) {
     renderSearchResults();
+    if (window.MomentumConversations) window.MomentumConversations.afterRender();
     return;
   }
 
@@ -823,6 +827,7 @@ function render(preserveScroll) {
     else if (activeTab === 'today') el.innerHTML = `<div class="section-label">${TODAYLABEL}</div><div class="empty" role="status"><strong>Today is clear</strong><br>No tasks are scheduled for today.<br><button class="add-root-btn" onclick="addTodayTask()">+ Add task</button></div>`;
     else if (activeTab === 'assigned') el.innerHTML = '<div class="empty" role="status"><strong>Nothing assigned to you</strong><br>Assigned tasks will appear here.</div>';
     else el.innerHTML = '<div class="empty" role="status"><strong>No tasks yet</strong><br>Create a task to get started.</div>';
+    if (window.MomentumConversations) window.MomentumConversations.afterRender();
     return;
   }
 
@@ -906,6 +911,7 @@ function render(preserveScroll) {
   } else if (preserveScroll && savedScroll) {
     el.scrollTop = savedScroll;
   }
+  if (window.MomentumConversations) window.MomentumConversations.afterRender();
   // Re-apply mobile styles after DOM rebuild
   if (isMobile) {
     applyMobileStyles();
@@ -1084,7 +1090,7 @@ function rowHTML(n, depth, flat = false, hasVisibleChildren = false) {
   var dragHandle = '<span class="drag-handle" data-drag="' + n.id + '" title="Drag">⠿</span><span class="sel-btn" data-sel="' + n.id + '" title="Select">' + selState + '</span>';
   var mobileToggle = (!flat && ch.length) ? '<span class="mobile-toggle" data-toggle="' + n.id + '">' + (collapsed[n.id] ? '▶' : '▼') + '</span>' : '';
   var mobileZoom = !flat ? '<span class="mobile-zoom-btn" data-zoom="' + n.id + '" title="Zoom in">⊙</span>' : '';
-  var voiceButton = !n.isSection ? '<button type="button" class="voice-task-btn" data-voice-task="' + esc(n.id) + '" title="Voice instructions and short history" aria-label="Voice instructions for ' + esc(n.name) + '">🎤</button>' : '';
+  var voiceButton = conversationButtonHTML(n);
   var mobileMenu = canEdit(n) ? '<button class="mobile-menu-btn" data-mobilemenu="' + n.id + '">⋯</button>' : '';
   return `<div class="${rowClass}" data-id="${n.id}" data-depth="${depth}" style="padding-left:${indentPx}px;">${guides}${dragHandle}${toggleEl}${markerEl}${inputEl}${meta}${voiceButton}${acts}${mobileMenu}${mobileZoom}${mobileToggle}</div>`;
 }
@@ -2716,6 +2722,10 @@ function highlightText(text, query) {
   return result;
 }
 
+function conversationButtonHTML(n) {
+  return !n.isSection ? '<button type="button" class="task-chat-btn" data-task-chat="' + esc(n.id) + '" title="Task conversation" aria-label="Conversation for ' + esc(n.name) + '" aria-expanded="false">🎤</button>' : '';
+}
+
 function searchRowHTML(n) {
   var bc = breadcrumb(n.id);
   var nd = n.date ? n.date.slice(0,10) : null;
@@ -2746,7 +2756,7 @@ function searchRowHTML(n) {
   var nameEl = '<div class="' + cls + '" id="inp_' + n.id + '" data-id="' + n.id + '" data-flat="true" style="pointer-events:none;user-select:text;">' + nameHtml + '</div>';
 
   return '<div class="' + rowClass + '" data-id="' + n.id + '" style="padding-left:8px;">' +
-    markerEl + nameEl + meta + acts + '</div>';
+    markerEl + nameEl + meta + conversationButtonHTML(n) + acts + '</div>';
 }
 
 function attachSearchEvents() {
@@ -4825,6 +4835,7 @@ function showMobileActionSheet(nodeId) {
 }
 
 function switchUser() {
+  if (window.MomentumStaging) return window.MomentumStaging.signOut();
   saveActiveInput();
   var done = function() {
     localStorage.removeItem('momentum_user_email');
@@ -4920,7 +4931,7 @@ function bootApp() {
 }
 
 // Register service worker for PWA
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !window.MomentumStaging) {
   var refreshingForUpdate = false;
   navigator.serviceWorker.addEventListener('controllerchange', function() {
     if (refreshingForUpdate) return;
@@ -5070,5 +5081,5 @@ document.addEventListener('DOMContentLoaded', function() {
     waited += 100;
     setTimeout(waitForGSI, 100);
   }
-  waitForGSI();
+  if (window.MomentumStaging) { showApp(); bootApp(); } else waitForGSI();
 });

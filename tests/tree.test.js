@@ -407,3 +407,13 @@ test('structure: global Enter creates a new task when not editing', () => {
   const src = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
   assert.match(src, /e\.key === 'Enter' && !inInput/, 'global Enter handler exists');
 });
+
+test('newly synced children stay under a local parent whose watching flag is unset', () => {
+  const c = app();
+  c.activeTab = 'today';
+  c.nodes = [node('parent', 'Local parent', null, '2026-09-19 10:00:00'),
+    Object.assign(node('child', 'Synced child', 'parent', '2026-09-19 10:00:00'), { watching: false })];
+  const rows = Array.from(c.visibleList(), row => ({ id: row.node.id, depth: row.depth, hasChildren: row.hasVisibleChildren }));
+  assert.deepEqual(rows.map(row => [row.id, row.depth]), [['parent', 0], ['child', 1]]);
+  assert.equal(rows[0].hasChildren, true);
+});

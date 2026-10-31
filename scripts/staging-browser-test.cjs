@@ -1,8 +1,13 @@
+/* Actual original outliner + staging Worker. Test identity exists only in this harness. */
 const assert=require('node:assert/strict');const http=require('node:http');const fs=require('node:fs');const {DatabaseSync}=require('node:sqlite');const {chromium,devices}=require('playwright');
 (async()=>{
  const db=new DatabaseSync(':memory:');db.exec(fs.readFileSync('staging/drizzle/0000_staging.sql','utf8'));
- const env={DB:{prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async run(){return {meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}};}}};
+ const env={OPENAI_API_KEY:'test-only',DB:{prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async run(){return {meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}};}}};
  const source=fs.readFileSync('staging/dist/server/index.js','utf8');const worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
+ const originalFetch=global.fetch;global.fetch=async(url,options)=>{
+  if(url!=='https://api.openai.com/v1/responses')throw Error('Unexpected external server request');
+  return new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'Confirm the documents before booking freight.',proposals:[{kind:'subtask',targetId:null,title:'Obtain bill of lading',reason:'A concrete prerequisite to discuss and approve.'}]})}]}]}));
+ };
  const server=http.createServer(async(req,res)=>{
   try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const headers=new Headers(req.headers);headers.set('oai-authenticated-user-id',(req.headers.cookie||'').includes('owner=bob')?'bob-test':'alice-test');
    const request=new Request('http://'+req.headers.host+req.url,{method:req.method,headers,body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});
@@ -12,42 +17,69 @@ const assert=require('node:assert/strict');const http=require('node:http');const
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const base='http://127.0.0.1:'+server.address().port;
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--use-fake-device-for-media-stream']});
  try{
-  const context=await browser.newContext({...devices['Pixel 7'],permissions:['microphone']});const page=await context.newPage();const errors=[],external=[];
-  page.on('pageerror',e=>errors.push(e.message));await context.route('**/*',r=>{if(!r.request().url().startsWith(base+'/')){external.push(r.request().url());return r.abort();}return r.continue();});
+  const context=await browser.newContext({viewport:{width:1200,height:900},serviceWorkers:'block'}),page=await context.newPage(),errors=[],external=[];
+  page.on('pageerror',error=>errors.push(error.message));await context.route('**/*',r=>{if(!r.request().url().startsWith(base+'/')){external.push(r.request().url());return r.abort();}return r.continue();});
   await page.addInitScript(()=>{window.speechInstances=[];window.SpeechRecognition=class{constructor(){speechInstances.push(this);}start(){}abort(){this.onend();}};});
-  await page.goto(base);await page.getByText(/Connected to private staging/).waitFor();
-  await page.getByRole('button',{name:'Check microphone',exact:true}).click();await page.getByText(/Microphone permission granted/).waitFor();
-  await page.getByLabel('Instruction · speak or type').fill('Decanter freight booking');await page.getByRole('button',{name:'🎤 Speak',exact:true}).click();
-  await page.evaluate(()=>{const r=speechInstances[0];r.onresult({results:[Object.assign([{transcript:'tomorrow'}],{isFinal:true})]});r.onresult({results:[Object.assign([{transcript:'tomorrow'}],{isFinal:true}),Object.assign([{transcript:'morning'}],{isFinal:true})]});});
-  assert.equal(await page.getByLabel('Instruction · speak or type').inputValue(),'Decanter freight booking tomorrow morning');
-  await page.getByRole('button',{name:'Save to staging',exact:true}).click();await page.getByText('Saved to staging. Available on your other signed-in devices.').waitFor();
-  const second=await browser.newContext({...devices['Pixel 7']});const phone=await second.newPage();await phone.goto(base);await phone.getByText(/Connected to private staging/).waitFor();
-  assert.equal(await phone.getByRole('button',{name:'Decanter freight booking tomorrow morning',exact:true}).count(),1);
-  await phone.getByLabel('Instruction · speak or type').fill('Decanter import');await phone.getByRole('button',{name:'Save to staging',exact:true}).click();await phone.getByText('Saved to staging. Available on your other signed-in devices.').waitFor();
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('button',{name:'Decanter import',exact:true}).waitFor();
-  await page.getByRole('button',{name:'Decanter freight booking tomorrow morning',exact:true}).click();
-  await page.getByLabel('Target task', {exact:true}).selectOption({label:'Decanter import'});await page.getByRole('button',{name:'Preview change',exact:true}).click();await page.getByText(/Proposal only · revision/).waitFor();
-  await page.getByRole('button',{name:'Approve and save change',exact:true}).click();await page.getByText('Structure change saved to staging.').waitFor();
-  await page.getByLabel('Action',{exact:true}).selectOption('supports');await page.getByRole('button',{name:'Preview change',exact:true}).click();await page.getByRole('button',{name:'Approve and save change',exact:true}).click();await page.getByText('Structure change saved to staging.').waitFor();
-  await phone.reload();await phone.getByText(/Connected to private staging/).waitFor();assert.match(await phone.locator('#links').innerText(),/supports → Decanter import/);
-  // A stale preview is rejected after another session changes the account revision.
-  await page.getByLabel('Action',{exact:true}).selectOption('related');await page.getByRole('button',{name:'Preview change',exact:true}).click();await page.getByText(/Proposal only · revision/).waitFor();
-  await phone.getByLabel('Instruction · speak or type').fill('Inspect plant equipment');await phone.getByRole('button',{name:'Save to staging',exact:true}).click();await phone.getByText('Saved to staging. Available on your other signed-in devices.').waitFor();
-  await page.getByRole('button',{name:'Approve and save change',exact:true}).click();await page.getByText(/Tasks changed on another device/).waitFor();
-  // Failed network leaves a recoverable draft; retry uses the same request ID.
-  await page.getByLabel('Instruction · speak or type').fill('Offline recoverable note');await context.setOffline(true);await page.getByRole('button',{name:'Save to staging',exact:true}).click();await page.getByText(/Not confirmed/).waitFor();assert.equal(await page.getByLabel('Instruction · speak or type').inputValue(),'Offline recoverable note');
-  await context.setOffline(false);await page.reload();await page.getByText(/Connected to private staging/).waitFor();assert.equal(await page.getByLabel('Instruction · speak or type').inputValue(),'Offline recoverable note');
-  await page.getByRole('button',{name:'Save to staging',exact:true}).click();await page.getByText('Saved to staging. Available on your other signed-in devices.').waitFor();
-  // Real Chromium microphone permission denial is handled while text stays usable.
-  await second.clearPermissions();await phone.getByRole('button',{name:'Check microphone',exact:true}).click();await phone.getByText(/Microphone unavailable/).waitFor();
-  await phone.getByLabel('Instruction · speak or type').fill('Text still works after permission denial');await phone.getByRole('button',{name:'Save to staging',exact:true}).click();await phone.getByText('Saved to staging. Available on your other signed-in devices.').waitFor();
-  await page.evaluate(()=>{delete window.SpeechRecognition;delete window.webkitSpeechRecognition;});
-  await page.addInitScript(()=>{delete window.SpeechRecognition;delete window.webkitSpeechRecognition;});await page.reload();await page.getByText(/Connected to private staging/).waitFor();assert.equal(await page.getByRole('button',{name:'🎤 Speak',exact:true}).isDisabled(),true);
-  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  const bob=await browser.newContext();await bob.addCookies([{name:'owner',value:'bob',url:base}]);const bobPage=await bob.newPage();await bobPage.goto(base);await bobPage.getByText(/Connected to private staging/).waitFor();assert.match(await bobPage.locator('#tree').innerText(),/empty/);
+  await page.goto(base);await page.getByRole('button',{name:'+ Add task',exact:true}).waitFor();
+  assert.equal(await page.title(),'Momentum – Staging Outliner');assert.equal(await page.locator('.mobile-nav').count(),1);assert.equal(await page.locator('[data-voice-capture]').count(),0);
+  await page.getByRole('button',{name:'+ Add task',exact:true}).click();
+  await page.locator('textarea.node-input:visible').fill('Decanter import');await page.locator('textarea.node-input:visible').press('Enter');
+  await page.locator('textarea.node-input:visible').fill('Freight booking');await page.locator('textarea.node-input:visible').press('Tab');
+  let ids=await page.evaluate(()=>({goal:nodes.find(n=>n.name==='Decanter import').id,freight:nodes.find(n=>n.name==='Freight booking').id}));
+  assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).parentId,ids.freight),ids.goal);
+  await page.locator('textarea.node-input:visible').press('Shift+Tab');assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).parentId,ids.freight),null);
+  await page.locator('textarea.node-input:visible').press('Tab');await page.evaluate(async()=>{window.assertSaved=await flushNow(10000);});
+  assert.equal(await page.evaluate(()=>assertSaved),true);
+  await page.locator('[data-task-chat="'+ids.freight+'"]').click();
+  const panel=page.locator('.task-conversation'),input=page.getByLabel('Message about this task');
+  assert.equal(await panel.evaluate(el=>el.previousElementSibling.dataset.id),ids.freight);
+  const taskCount=await page.evaluate(()=>nodes.length);
+  await input.fill('Typed context');await page.getByRole('button',{name:'🎤 Speak',exact:true}).click();
+  await page.evaluate(()=>{const r=speechInstances[0];r.onresult({results:[Object.assign([{transcript:'freight'}],{isFinal:true})]});r.onresult({results:[Object.assign([{transcript:'freight'}],{isFinal:true}),Object.assign([{transcript:'tomorrow'}],{isFinal:true})]});});
+  assert.equal(await input.inputValue(),'Typed context freight tomorrow');
+  await page.getByRole('button',{name:'■ Stop',exact:true}).click();await page.getByRole('button',{name:'🎤 Speak',exact:true}).click();
+  await page.evaluate(()=>speechInstances[1].onerror({error:'not-allowed'}));await page.getByText(/Speech error: not-allowed/).waitFor();assert.equal(await input.inputValue(),'Typed context freight tomorrow');
+  await input.fill('What prerequisites do we need?');await input.press('Enter');assert.equal(await page.evaluate(()=>nodes.length),taskCount);
+  await page.getByRole('button',{name:'Send',exact:true}).click();await panel.getByText('Confirm the documents before booking freight.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>nodes.length),taskCount);assert.equal(await page.locator('.task-chat-proposal').count(),1);
+  await page.getByRole('button',{name:'Close conversation',exact:true}).click();assert.equal(await panel.count(),0);assert.equal(await page.locator('[data-task-chat="'+ids.freight+'"]').evaluate(el=>el===document.activeElement),true);
+  await page.locator('[data-task-chat="'+ids.freight+'"]').press('Enter');await panel.getByText('What prerequisites do we need?',{exact:true}).waitFor();
+  await input.fill('Draft before rerender');await page.evaluate(()=>render(true));assert.equal(await input.inputValue(),'Draft before rerender');assert.equal(await input.evaluate(el=>document.activeElement===el),true);
+  await input.press('Escape');assert.equal(await panel.count(),0);await page.locator('[data-task-chat="'+ids.freight+'"]').click();assert.equal(await input.inputValue(),'Draft before rerender');
+  await page.getByRole('button',{name:'Preview proposed change',exact:true}).click();await page.getByText(/Preview only. Approve/).waitFor();assert.equal(await page.evaluate(()=>nodes.length),taskCount);
+  await page.getByRole('button',{name:'Approve this change',exact:true}).click();await page.getByText('Approved change saved to staging.').waitFor();assert.equal(await page.evaluate(()=>nodes.length),taskCount+1);
+  await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  const child=await page.evaluate(()=>nodes.find(n=>n.name==='Obtain bill of lading').id);
+  await page.locator('[data-check="'+child+'"]').check();assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).done,child),true);
+  await page.locator('#undoBtn').click();assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).done,child),false);
+  await page.locator('#redoBtn').click();assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).done,child),true);
+  await page.locator('#undoBtn').click();await page.evaluate(()=>flushNow(10000));
+  await page.locator('[data-task-chat="'+child+'"]').click();await page.getByLabel('Message about this task').fill('Child conversation draft');
+  await page.locator('[data-toggle="'+ids.freight+'"]').first().click();assert.equal(await panel.count(),0);
+  await page.locator('[data-toggle="'+ids.freight+'"]').first().click();await page.locator('[data-task-chat="'+child+'"]').click();assert.equal(await input.inputValue(),'Child conversation draft');await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  // Ordinary title editing, Enter, undo and redo still use the existing app paths.
+  await page.locator('#disp_'+ids.freight).click();await page.locator('#inp_'+ids.freight).fill('Freight booking renamed');await page.locator('#inp_'+ids.freight).press('Tab');await page.evaluate(()=>flushNow(10000));
+  await page.locator('[data-task-chat="'+ids.freight+'"]').click();await panel.getByText('What prerequisites do we need?',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  // A second independent browser session uses the same durable backend.
+  const mobile=await browser.newContext({...devices['Pixel 7'],serviceWorkers:'block'}),phone=await mobile.newPage();phone.on('pageerror',error=>errors.push(error.message));
+  await phone.addInitScript(()=>{delete window.SpeechRecognition;delete window.webkitSpeechRecognition;});await phone.goto(base);await phone.locator('[data-task-chat="'+ids.freight+'"]').waitFor();
+  assert.equal(await phone.locator('#mobileNav').isVisible(),true);await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();
+  await phone.locator('.task-conversation').getByText('What prerequisites do we need?',{exact:true}).waitFor();assert.equal(await phone.getByRole('button',{name:'🎤 Speak',exact:true}).isDisabled(),true);
+  assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await phone.getByLabel('Message about this task').fill('Offline phone draft');await mobile.setOffline(true);await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/Send not confirmed/).waitFor();
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await mobile.setOffline(false);await phone.reload();await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();assert.equal(await phone.getByLabel('Message about this task').inputValue(),'Offline phone draft');
+  env.OPENAI_API_KEY='';await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/AI is not connected yet/).waitFor();
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.locator('#mnav-tree').tap();await phone.locator('#mnav-today').tap();assert.equal(await phone.locator('[data-task-chat="'+ids.freight+'"]').count(),1);
+  // Conversation keyboard events never create/undo outline tasks.
+  await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();const before=await phone.evaluate(()=>nodes.length);await phone.getByLabel('Message about this task').press('Control+z');assert.equal(await phone.evaluate(()=>nodes.length),before);
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
+  await phone.locator('#mobileFab').tap();await phone.locator('textarea.node-input:visible').fill('Android native task');
+  await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();await phone.evaluate(()=>flushNow(10000));assert.equal(await phone.evaluate(()=>nodes.some(n=>n.name==='Android native task')),true);
+  await phone.screenshot({path:'work/outliner-mobile.png',fullPage:true});
+  const bob=await browser.newContext({serviceWorkers:'block'});await bob.addCookies([{name:'owner',value:'bob',url:base}]);const bobPage=await bob.newPage();await bobPage.goto(base);await bobPage.getByText('Today is clear',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
-  await page.screenshot({path:'work/staging-mobile.png',fullPage:true});
-  console.log('PASS: Pixel 7 viewport; real Chromium fake-device microphone grant and denial; simulated speech snapshots; two-session persistence; reviewed moves/links; stale approval rejection; offline draft recovery/retry; text fallback; per-account isolation; no external requests or page errors.');
-  await second.close();await bob.close();await context.close();
- }finally{await browser.close();await new Promise(resolve=>server.close(resolve));db.close();}
+  console.log('PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; zero external requests/page errors.');
+  await bob.close();await mobile.close();await context.close();
+ }finally{global.fetch=originalFetch;await browser.close();await new Promise(resolve=>server.close(resolve));db.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

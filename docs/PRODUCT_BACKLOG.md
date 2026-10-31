@@ -37,3 +37,7 @@ Implemented on `dev/voice-capture-structure-milestone`: recoverable browser-loca
 ## Private staging milestone — 31 October 2026
 
 Implemented on `dev/voice-capture-structure-milestone`: owner-private HTTPS staging, separate D1 storage, cross-session saved captures, server-reviewed structure writes and automated mobile permission/fallback tests. No Google or production data integration. Physical Android microphone and signed-in live-site tests remain pending. See `STAGING_REPORT.md`.
+
+## Architectural correction — outliner-first staging
+
+The existing Momentum outliner is the product foundation. The standalone staging capture dashboard is removed. Contextual voice/text panels now sit under existing task rows, with persistent ID-bound history and reviewed changes. Preserve native Today/hierarchy/keyboard/mobile workflows. Provider credentials and physical Android verification remain prerequisites for live AI/audio acceptance. See `OUTLINER_STAGING_REPORT.md`.

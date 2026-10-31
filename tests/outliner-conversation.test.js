@@ -1,0 +1,69 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {DatabaseSync}=require('node:sqlite');
+require('../task-relations.js');const relations=globalThis.MomentumTaskRelations;
+const api=import('../staging/worker/api.js'),native=import('../staging/worker/native-rpc.js'),chat=import('../staging/worker/conversations.js');
+async function setup(){
+ const {StagingRepository}=await api;const db=new DatabaseSync(':memory:');db.exec(fs.readFileSync('staging/drizzle/0000_staging.sql','utf8'));
+ const binding={prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async run(){return {meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}};}};
+ return {repo:new StagingRepository(binding),binding};
+}
+async function seed(repo,owner='alice'){
+ const {nativeRpc}=await native;const initial=await nativeRpc(repo,owner,{fn:'getInitialData'},relations);
+ const arg={saves:[{id:'goal',name:'Decanter import',parentId:null,isSection:false,done:false,date:'2026-10-31 10:00:00',order:1},{id:'freight',name:'Freight booking',parentId:null,isSection:false,done:false,date:'2026-10-31 10:00:00',order:2}],deletes:[]};
+ return nativeRpc(repo,owner,{fn:'batchOps',arg,requestId:'seed',expectedTree:initial.treeToken},relations);
+}
+test('native queue protocol persists original hierarchy, editing and delete acknowledgements',async()=>{
+ const {repo}=await setup(),{nativeRpc}=await native;await seed(repo);
+ const state=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);assert.equal(state.nodes.length,2);
+ state.nodes[1].name='Book freight';state.nodes[1].parentId='goal';
+ const body={fn:'batchOps',arg:{saves:[state.nodes[1]],deletes:[]},requestId:'edit',expectedTree:state.treeToken};
+ const result=await nativeRpc(repo,'alice',body,relations);assert.deepEqual(result.results.saves,[{id:'freight',ok:true}]);
+ assert.equal((await nativeRpc(repo,'alice',body,relations)).treeToken,result.treeToken);
+ assert.equal((await repo.read('alice')).state.tasks[1].parentId,'goal');
+ await nativeRpc(repo,'alice',{fn:'batchOps',arg:{saves:[],deletes:['freight']},requestId:'delete',expectedTree:result.treeToken},relations);
+ assert.equal((await repo.read('alice')).state.tasks.length,1);
+});
+test('native batch rejects cross-device stale edits, missing parents, cycles and forbidden management',async()=>{
+ const {repo}=await setup(),{nativeRpc}=await native;const result=await seed(repo);
+ await assert.rejects(nativeRpc(repo,'alice',{fn:'batchOps',requestId:'stale',arg:{saves:[],deletes:['freight']},expectedTree:'old'},relations),/another device/);
+ await assert.rejects(nativeRpc(repo,'alice',{fn:'batchOps',requestId:'cycle',arg:{saves:[{id:'goal',name:'Goal',parentId:'goal'}],deletes:[]},expectedTree:result.treeToken},relations),/cycle/);
+ await assert.rejects(nativeRpc(repo,'alice',{fn:'batchOps',requestId:'orphan',arg:{saves:[{id:'freight',name:'Freight',parentId:'missing'}],deletes:[]},expectedTree:result.treeToken},relations),/Parent task not found/);
+ await assert.rejects(nativeRpc(repo,'alice',{fn:'saveTeamMember'},relations),/not enabled/);
+});
+test('task messages persist by stable ID through rename/reparent and never become outline children',async()=>{
+ const {repo}=await setup(),{saveMessage,conversationState}=await chat,{nativeRpc}=await native;await seed(repo);
+ await saveMessage(repo,'alice',{taskId:'freight',text:'What prerequisites do we need?',requestId:'message_1'});
+ const after=await repo.read('alice');assert.equal(after.state.tasks.length,2);assert.equal(after.state.messages.length,1);
+ const state=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);state.nodes[1].name='Renamed task';state.nodes[1].parentId='goal';
+ await nativeRpc(repo,'alice',{fn:'batchOps',arg:{saves:[state.nodes[1]],deletes:[]},requestId:'rename',expectedTree:state.treeToken},relations);
+ assert.equal(conversationState(await repo.read('alice'),'freight').messages[0].content,'What prerequisites do we need?');
+ await saveMessage(repo,'alice',{taskId:'freight',text:'What prerequisites do we need?',requestId:'message_1'});assert.equal((await repo.read('alice')).state.messages.length,1);
+ await assert.rejects(saveMessage(repo,'alice',{taskId:'goal',text:'Changed',requestId:'message_1'}),/different content/);
+ await assert.rejects(saveMessage(repo,'bob',{taskId:'freight',text:'No access',requestId:'intruder'}),/not found/);
+});
+test('missing AI credentials save real messages without fabricating assistant replies',async()=>{
+ const {repo}=await setup(),{saveMessage,answerMessage}=await chat;await seed(repo);
+ await saveMessage(repo,'alice',{taskId:'freight',text:'Plan this task',requestId:'m'});
+ const response=await answerMessage(repo,'alice','freight','m',{},()=>{throw Error('must not call provider');});
+ assert.equal(response.aiStatus,'unconfigured');assert.equal(response.messages.length,1);assert.equal(response.messages[0].role,'user');
+});
+test('AI context is task-specific; structured proposals stay inert until reviewed approval',async()=>{
+ const {repo}=await setup(),{saveMessage,answerMessage}=await chat,{execute}=await api;await seed(repo);
+ await saveMessage(repo,'alice',{taskId:'goal',text:'Private other conversation',requestId:'other'});
+ await saveMessage(repo,'alice',{taskId:'freight',text:'Suggest a prerequisite',requestId:'m'});
+ let requests=0;const fetcher=async(url,options)=>{requests++;assert.equal(url,'https://api.openai.com/v1/responses');const input=JSON.parse(options.body);assert.doesNotMatch(JSON.stringify(input.input),/Private other conversation/);assert.equal(input.store,false);
+  return new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'Confirm the bill first.',proposals:[{kind:'subtask',targetId:null,title:'Obtain bill of lading',reason:'Required before freight booking'}]})}]}]}),{status:200});};
+ const response=await answerMessage(repo,'alice','freight','m',{OPENAI_API_KEY:'test-only'},fetcher);
+ assert.equal(response.messages.at(-1).role,'assistant');assert.equal((await repo.read('alice')).state.tasks.length,2);
+ await answerMessage(repo,'alice','freight','m',{OPENAI_API_KEY:'test-only'},fetcher);assert.equal(requests,1);
+ const {proposal}=await execute(repo,'alice','/api/preview',{taskId:'freight',kind:'subtask',title:'Obtain bill of lading'},relations);
+ await assert.rejects(execute(repo,'alice','/api/apply',{requestId:'no_approval',proposal,approved:false},relations),/approval/);
+ const applied=await execute(repo,'alice','/api/apply',{requestId:'approved',proposal,approved:true},relations);assert.equal(applied.tasks.length,3);assert.equal(applied.tasks[2].parentId,'freight');
+});
+test('failed AI requests preserve history and support an explicit retry',async()=>{
+ const {repo}=await setup(),{saveMessage,answerMessage}=await chat;await seed(repo);await saveMessage(repo,'alice',{taskId:'freight',text:'Help',requestId:'m'});
+ const failed=await answerMessage(repo,'alice','freight','m',{OPENAI_API_KEY:'test-only'},async()=>new Response('',{status:429}));assert.equal(failed.aiStatus,'failed');assert.equal(failed.retryMessageId,'m');assert.equal((await repo.read('alice')).state.tasks.length,2);
+});
+test('staging is built from canonical outliner files and strips production endpoints',()=>{
+ for(const file of ['index.html','app.js','styles.css','core.js','task-conversation.js','task-conversation.css'])assert.equal(fs.readFileSync(file,'utf8'),fs.readFileSync('staging/original/'+file,'utf8'));
+ const worker=fs.readFileSync('staging/dist/server/index.js','utf8');assert.doesNotMatch(worker,/script\.google\.com|accounts\.google\.com|apps\.googleusercontent\.com/);assert.match(worker,/mobileNav/);assert.match(worker,/Momentum – Staging Outliner/);
+});

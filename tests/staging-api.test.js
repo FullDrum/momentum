@@ -53,6 +53,6 @@ test('HTTP API fails closed for missing identity, cross-origin writes and malfor
 });
 test('staging shared controllers match the tested canonical modules; bundle has no production integrations',()=>{
  for(const file of ['voice-capture.js','task-relations.js'])assert.equal(fs.readFileSync('staging/shared/'+file,'utf8'),fs.readFileSync(file,'utf8'));
- const web=fs.readFileSync('staging/web/app.js','utf8')+fs.readFileSync('staging/worker/api.js','utf8');
+ const web=fs.readFileSync('staging/web/adapter.js','utf8')+fs.readFileSync('staging/worker/api.js','utf8');
  assert.doesNotMatch(web,/script\.google\.com|sheets\.googleapis|momentum\.nikita-da2|GOOGLE_CLIENT_ID/);
 });

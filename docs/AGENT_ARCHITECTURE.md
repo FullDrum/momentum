@@ -47,3 +47,7 @@ The development milestone now shares capture and structure logic between the tas
 ## Isolated hosted staging
 
 A separate owner-private HTTPS application under `staging/` now uses platform identity and a dedicated D1 database. Saved notes and approved structure changes are account-scoped and durable; revision comparisons reject stale reviews. The production application remains separate and unchanged. See `STAGING_REPORT.md` for the deployed URL, provenance, automated results and manual Android checks still pending.
+
+## Outliner-first contextual conversations — 31 October 2026
+
+The standalone capture dashboard is superseded. Staging now builds the canonical Momentum `index.html`/`app.js`/styles and uses a staging-only transport adapter. A task-row button opens an inline sibling panel; conversations live outside the node tree and are keyed by stable task ID. Server AI proposals never enter task-save batches automatically: subtasks, links and moves require preview plus explicit approval. Live AI replies require a separately configured server provider key; no key is currently configured. See `OUTLINER_STAGING_REPORT.md`.

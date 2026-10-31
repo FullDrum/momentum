@@ -67,37 +67,23 @@ const server=http.createServer((req,res)=>{
   const shot=process.env.DEMO_SCREENSHOT;if(shot){await page.getByRole('button',{name:'Close',exact:true}).click();await page.setViewportSize({width:1100,height:900});await page.screenshot({path:shot,fullPage:true});}
   assert.deepEqual(external,[]);assert.deepEqual(errors,[]);
   console.log('PASS: shared demo; cumulative speech; draft recovery; text save; suggestions; reviewed move/link; cycle rejection; quota recovery; mobile layout; no speech fallback; zero external requests; zero page errors.');
-  // Actual app shell and modal smoke test, with all external traffic blocked.
-  await page.goto(base+'/');await page.evaluate(()=>{currentUser='alice@example.test';nodes=[{id:'synthetic',name:'Synthetic app task',parentId:null}];MomentumVoice.open('synthetic');});
-  assert.equal(await page.getByRole('dialog').count(),1);assert.equal(await page.getByLabel('Result / outcome').count(),1);assert.equal(await page.getByLabel('Next action').count(),1);
-  await page.getByLabel('Instruction · speak or type').fill('Alice private draft');
-  await page.evaluate(()=>{currentUser='bob@example.test';});
-  await page.getByRole('button',{name:'Save capture locally'}).click();
-  assert.match(await page.getByRole('dialog').innerText(),/Account changed/);
-  await page.getByRole('button',{name:'Close',exact:true}).click();
-  await page.evaluate(()=>MomentumVoice.open('synthetic'));
-  assert.equal(await page.getByLabel('Instruction · speak or type').inputValue(),'');
-  await page.getByRole('button',{name:'Close',exact:true}).click();
-  await page.evaluate(()=>{currentUser='alice@example.test';MomentumVoice.open('synthetic');});
-  assert.equal(await page.getByLabel('Instruction · speak or type').inputValue(),'Alice private draft');
-  await page.getByRole('button',{name:'Close',exact:true}).focus();await page.keyboard.press('Enter');
-  assert.equal(await page.getByRole('dialog').count(),0);assert.equal(await page.evaluate(()=>nodes.length),1);
-  assert.deepEqual(errors,[]);console.log('PASS: actual application startup and task modal without production access.');
+  // Canonical app shell and updated PWA assets remain usable offline.
+  await page.goto(base+'/');
+  assert.equal(await page.title(),'Momentum – Task Manager');
+  assert.equal(await page.getByRole('button',{name:'Sign in with Google',exact:true}).isVisible(),true);
+  assert.equal(await page.locator('[data-voice-capture]').count(),0);
+  assert.equal(await page.evaluate(()=>typeof MomentumConversations.open),'function');
+  assert.deepEqual(errors,[]);console.log('PASS: canonical application shell and inline conversation module; no capture dashboard.');
   const offline=await browser.newContext({serviceWorkers:'allow'});
   await offline.route('**/*',route=>route.request().url().startsWith(base+'/')?route.continue():route.abort());
   const cachedPage=await offline.newPage();await cachedPage.goto(base+'/');
-  await cachedPage.waitForEvent('load');
-  await cachedPage.waitForFunction(()=>navigator.serviceWorker.controller);
-  const assets=await cachedPage.evaluate(async()=>{const cache=await caches.open('momentum-v39');return (await cache.keys()).map(r=>new URL(r.url).pathname);});
-  for(const asset of ['/voice-task.js','/voice-capture.js','/voice-task.css','/task-relations.js'])assert.ok(assets.includes(asset),asset);
-  // Visiting the sandbox must not replace the app shell in the offline cache.
+  await cachedPage.waitForEvent('load');await cachedPage.waitForFunction(()=>navigator.serviceWorker.controller);
+  const assets=await cachedPage.evaluate(async()=>{const cache=await caches.open('momentum-v40');return (await cache.keys()).map(r=>new URL(r.url).pathname);});
+  for(const asset of ['/task-conversation.js','/voice-capture.js','/task-conversation.css','/task-relations.js'])assert.ok(assets.includes(asset),asset);
   await cachedPage.goto(base+'/prototypes/task-structure-live.html');
   await offline.setOffline(true);await cachedPage.goto(base+'/');
   assert.equal(await cachedPage.title(),'Momentum – Task Manager');
-  await cachedPage.getByRole('button',{name:'Capture note',exact:true}).click();
-  await cachedPage.getByLabel('Instruction · speak or type').fill('Offline note');
-  await cachedPage.getByRole('button',{name:'Save capture locally'}).click();
-  assert.match(await cachedPage.getByRole('dialog').innerText(),/Saved locally/);
-  await offline.close();console.log('PASS: service-worker assets, sandbox navigation isolation, offline application capture.');
+  assert.equal(await cachedPage.evaluate(()=>typeof MomentumConversations.open),'function');
+  await offline.close();console.log('PASS: updated service-worker assets, sandbox navigation isolation and offline outliner shell.');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});

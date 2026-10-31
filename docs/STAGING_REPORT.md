@@ -1,3 +1,5 @@
+> Superseded by `OUTLINER_STAGING_REPORT.md`: version 2 restores the original Momentum outliner. This file records the earlier dashboard phase.
+
 # Momentum Next staging milestone
 
 31 October 2026 · Pacific/Auckland
