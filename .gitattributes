@@ -1,0 +1,2 @@
+# The deployment snapshot preserves the canonical manifest's CRLF bytes.
+staging/original/manifest.json whitespace=cr-at-eol
