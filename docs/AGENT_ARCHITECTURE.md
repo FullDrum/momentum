@@ -43,3 +43,7 @@ The development milestone now shares capture and structure logic between the tas
 - Moving a task under its descendant is rejected.
 - The user can inspect a proposed bulk reorganization and approve or reject it.
 - The agent can explain *why* each link or move was suggested.
+
+## Isolated hosted staging
+
+A separate owner-private HTTPS application under `staging/` now uses platform identity and a dedicated D1 database. Saved notes and approved structure changes are account-scoped and durable; revision comparisons reject stale reviews. The production application remains separate and unchanged. See `STAGING_REPORT.md` for the deployed URL, provenance, automated results and manual Android checks still pending.

@@ -1,0 +1,51 @@
+Momentum Next staging validation — 31 October 2026 (Pacific/Auckland)
+
+Node 22.23.4 — npm test
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 405.783558
+
+Staging mobile integration
+PASS: Pixel 7 viewport; real Chromium fake-device microphone grant and denial; simulated speech snapshots; two-session persistence; reviewed moves/links; stale approval rejection; offline draft recovery/retry; text fallback; per-account isolation; no external requests or page errors.
+
+Live HTTPS probe (environment proxy boundary)
+[
+  {
+    "path": "/",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "path": "/api/health",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "path": "/api/state",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "path": "/",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  }
+]
+
+Native hosting deployment: succeeded
+Native D1 overview: DB / staging_state
+Native access policy: custom / one owner / zero groups
+
+Physical Android audio, sign-in and live user-owned API writes remain manual verification.
+
+Existing application browser regression
+
+> test:browser
+> node scripts/browser-test.cjs
+
+PASS: shared demo; cumulative speech; draft recovery; text save; suggestions; reviewed move/link; cycle rejection; quota recovery; mobile layout; no speech fallback; zero external requests; zero page errors.
+PASS: actual application startup and task modal without production access.
+PASS: service-worker assets, sandbox navigation isolation, offline application capture.

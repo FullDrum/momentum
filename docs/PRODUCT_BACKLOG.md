@@ -33,3 +33,7 @@ Production photo storage; worker sharing/permissions UX; per-person priority que
 ## Development milestone — 31 October 2026
 
 Implemented on `dev/voice-capture-structure-milestone`: recoverable browser-local voice/text capture, explainable keyword suggestions, and shared reviewed structure logic in a synthetic sandbox. Capture and structure have Node and Chromium tests. Regular application capture does not call the backend; task creation and applied moves/links are sandbox-only. See `DEVELOPMENT_MILESTONE.md` for validation and next steps. Remaining priorities above still require staging integrations before production rollout.
+
+## Private staging milestone — 31 October 2026
+
+Implemented on `dev/voice-capture-structure-milestone`: owner-private HTTPS staging, separate D1 storage, cross-session saved captures, server-reviewed structure writes and automated mobile permission/fallback tests. No Google or production data integration. Physical Android microphone and signed-in live-site tests remain pending. See `STAGING_REPORT.md`.
