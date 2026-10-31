@@ -7,6 +7,7 @@ const assert=require('node:assert/strict');const http=require('node:http');const
  let transcriptionRequests=0;const originalFetch=global.fetch;global.fetch=async(url,options)=>{
   if(url==='https://api.openai.com/v1/audio/transcriptions'){transcriptionRequests++;assert.equal(options.body.has('language'),false);return Response.json({text:'Привет, freight tomorrow.'});}
   if(url!=='https://api.openai.com/v1/responses')throw Error('Unexpected external server request');
+  const payload=JSON.parse(options.body);if(payload.input.some(m=>m.content==='Repair blocked transfer pump'))return Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'The goal is clear.',proposals:[{kind:'title',targetId:null,title:'Repair transfer pump',reason:'A concrete action from the conversation.',confidence:'high'}]})}]}]});
   return new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'Confirm the documents before booking freight.',proposals:[{kind:'subtask',targetId:null,title:'Obtain bill of lading',reason:'A concrete prerequisite to discuss and approve.'}]})}]}]}));
  };
  const server=http.createServer(async(req,res)=>{
@@ -52,7 +53,7 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   await input.fill('Draft before rerender');await page.evaluate(()=>render(true));assert.equal(await input.inputValue(),'Draft before rerender');assert.equal(await input.evaluate(el=>document.activeElement===el),true);
   await input.press('Escape');assert.equal(await panel.count(),0);await page.locator('[data-task-chat="'+ids.freight+'"]').click();assert.equal(await input.inputValue(),'Draft before rerender');
   assert.equal(await page.getByRole('button',{name:'Preview proposed change',exact:true}).isVisible(),false);await page.locator('.task-chat-structure > summary').click();
-  await page.getByRole('button',{name:'Preview proposed change',exact:true}).click();await page.getByText(/Preview only. Approve/).waitFor();assert.equal(await page.evaluate(()=>nodes.length),taskCount);
+  await page.getByRole('button',{name:'Preview proposed change',exact:true}).click();await page.getByText(/Not applied/).waitFor();assert.equal(await page.evaluate(()=>nodes.length),taskCount);
   await page.getByRole('button',{name:'Approve this change',exact:true}).click();await page.getByText('Approved change saved to staging.').waitFor();assert.equal(await page.evaluate(()=>nodes.length),taskCount+1);
   await page.getByRole('button',{name:'Close conversation',exact:true}).click();
   const child=await page.evaluate(()=>nodes.find(n=>n.name==='Obtain bill of lading').id);
@@ -80,7 +81,7 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await phone.getByLabel('Message about this task').fill('Offline phone draft');await mobile.setOffline(true);await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/Send not confirmed/).waitFor();
   await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await mobile.setOffline(false);await phone.reload();await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();assert.equal(await phone.getByLabel('Message about this task').inputValue(),'Offline phone draft');
-  env.OPENAI_API_KEY='';await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/AI is not connected yet/).waitFor();
+  env.OPENAI_API_KEY='';await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-health').getByText('AI off',{exact:true}).waitFor();
   await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.locator('#mnav-tree').tap();await phone.locator('#mnav-today').tap();assert.equal(await phone.locator('[data-task-chat="'+ids.freight+'"]').count(),1);
   // Conversation keyboard events never create/undo outline tasks.
   await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();const before=await phone.evaluate(()=>nodes.length);await phone.getByLabel('Message about this task').press('Control+z');assert.equal(await phone.evaluate(()=>nodes.length),before);
@@ -97,7 +98,7 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   await phone.locator('[data-task-chat="'+blankId+'"]').tap();await phone.getByLabel('Message about this task').fill('Blank task phone conversation');
   await phone.waitForFunction(()=>document.getElementById('kbIndent').disabled);
   assert.ok(await phone.locator('.task-chat-controls').evaluate(n=>n.getBoundingClientRect().bottom<=document.getElementById('kbBar').getBoundingClientRect().top+1));
-  await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/AI is not connected yet/).waitFor();
+  await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-health').getByText('AI off',{exact:true}).waitFor();
   await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.evaluate(()=>{visualViewport.keyboardHeight=null;visualViewport.dispatchEvent(new Event('resize'));});
   await phone.waitForFunction(()=>!document.body.classList.contains('keyboard-open')&&Math.abs(document.getElementById('app').getBoundingClientRect().height-innerHeight)<2);
   await phone.reload();await phone.locator('[data-task-chat="'+blankId+'"]').tap();await phone.locator('.task-chat-log').getByText('Blank task phone conversation',{exact:true}).waitFor();
@@ -106,10 +107,21 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   await mobile.setOffline(true);await phone.locator('#mobileFab').tap();const offlineBlank=await phone.evaluate(()=>focusId);
   await phone.locator('[data-task-chat="'+offlineBlank+'"]').tap();await phone.getByLabel('Message about this task').fill('Offline blank draft');await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
   await mobile.setOffline(false);await phone.reload();await phone.locator('[data-task-chat="'+offlineBlank+'"]').tap();assert.equal(await phone.getByLabel('Message about this task').inputValue(),'Offline blank draft');
-  await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText(/AI is not connected yet/).waitFor();await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
+  await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-health').getByText('AI off',{exact:true}).waitFor();await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
   await phone.locator('#mobileFab').tap();await phone.locator('textarea.node-input:visible').fill('Android native task');
   await phone.locator('[data-task-chat="'+ids.freight+'"]').tap();await phone.evaluate(()=>flushNow(10000));assert.equal(await phone.evaluate(()=>nodes.some(n=>n.name==='Android native task')),true);
-  await phone.screenshot({path:'work/outliner-mobile.png',fullPage:true});
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
+  env.OPENAI_API_KEY='test-only';await phone.locator('#mobileFab').tap();const titleId=await phone.evaluate(()=>focusId);await phone.locator('[data-task-chat="'+titleId+'"]').tap();
+  await phone.getByLabel('Message about this task').fill('Repair blocked transfer pump');await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-log').getByText('The goal is clear.',{exact:true}).waitFor();
+  assert.equal(await phone.evaluate(id=>nodes.find(n=>n.id===id).name,titleId),'');const beforeTitle=await phone.evaluate(()=>nodes.length);
+  assert.equal(await phone.getByRole('button',{name:'Preview proposed change',exact:true}).isVisible(),false);await phone.locator('.task-chat-structure > summary').tap();await phone.getByRole('button',{name:'Preview proposed change',exact:true}).tap();await phone.getByText(/Title: New task/).waitFor();
+  await phone.getByRole('button',{name:'Approve this change',exact:true}).tap();await phone.getByText('Approved change saved to staging.').waitFor();assert.equal(await phone.evaluate(id=>nodes.find(n=>n.id===id).name,titleId),'Repair transfer pump');assert.equal(await phone.evaluate(()=>nodes.length),beforeTitle);
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.reload();await phone.locator('[data-task-chat="'+titleId+'"]').tap();await phone.locator('.task-chat-log').getByText('Repair blocked transfer pump',{exact:true}).waitFor();
+  assert.equal(await phone.locator('.task-chat-history').evaluate(n=>n.open),false);assert.equal(await phone.locator('.task-chat-structure').evaluate(n=>n.open),false);
+  await phone.waitForFunction(()=>{const compose=document.querySelector('.task-chat-compose');return compose.getBoundingClientRect().bottom<=document.getElementById('treeEl').getBoundingClientRect().bottom;});
+  assert.equal(await phone.locator('#mobileFab').evaluate(n=>n.parentElement.classList.contains('toolbar')),true);
+  assert.ok(await phone.locator('#mobileNav').evaluate(n=>n.getBoundingClientRect().bottom<=visualViewport.height+visualViewport.offsetTop+1));
+  await phone.screenshot({path:'work/connect-compact-mobile.png',fullPage:true});
   const bob=await browser.newContext({serviceWorkers:'block'});await bob.addCookies([{name:'owner',value:'bob',url:base}]);const bobPage=await bob.newPage();await bobPage.goto(base);await bobPage.getByText('Today is clear',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   console.log('PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; blank-task ID persistence and offline reload; automatic-language final audio transcription; keyboard-open/closed viewport controls; zero external requests/page errors.');

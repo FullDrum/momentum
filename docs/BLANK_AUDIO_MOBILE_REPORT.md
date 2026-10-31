@@ -1,3 +1,5 @@
+> Latest status: `AI_VOICE_COMPACT_STATUS.md` describes version 4 and the unresolved real-provider connection.
+
 # Momentum Next — blank tasks, final transcription and mobile keyboard
 
 31 October 2026 · Pacific/Auckland

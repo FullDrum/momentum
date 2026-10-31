@@ -33,9 +33,16 @@ export async function execute(repo,owner,path,body,relations){
  if(path==='/api/state')return publicState(await repo.read(owner));
  if(path==='/api/preview'){
   const {state,revision}=await repo.read(owner);let proposal;
+  if(body.kind==='title'){
+   const task=state.tasks.find(t=>t.id===id(body.taskId)&&!t.isSection);if(!task)fail(404,'Task not found');
+   if(String(task.name||'').trim())fail(409,'This task already has a title. Refresh before suggesting a new one.');
+   const title=text(body.title,'task title',100);if(!title||/^new task$/i.test(title))fail(400,'Enter a specific task title');
+   return {proposal:{kind:'title',taskId:task.id,fromTitle:task.name||'',title,baseRevision:revision,requiresApproval:true}};
+  }
   if(body.kind==='subtask'){
    const parent=state.tasks.find(t=>t.id===id(body.taskId));if(!parent)fail(404,'Task not found');
    const title=text(body.title,'subtask title',300);if(!title)fail(400,'Enter a subtask title');
+   if(state.tasks.some(t=>t.parentId===parent.id&&String(t.name||'').trim().toLowerCase()===title.toLowerCase()))fail(400,'A matching subtask already exists');
    return {proposal:{kind:'subtask',parentId:parent.id,parentName:parent.name,title,baseRevision:revision,requiresApproval:true}};
   }
   try{proposal=body.kind==='move'?relations.proposeMove(state.tasks,id(body.taskId),body.targetId===null?null:id(body.targetId)):relations.proposeLink(state.tasks,id(body.taskId),id(body.targetId),body.kind);}
@@ -64,9 +71,15 @@ export async function execute(repo,owner,path,body,relations){
    if(body.approved!==true)fail(400,'Explicit approval required');
    const proposal=body.proposal;
    if(!proposal||proposal.baseRevision!==revision)fail(409,'Tasks changed on another device. Preview again.');
-   if(proposal.kind==='subtask'){
+   if(proposal.kind==='title'){
+    const task=next.tasks.find(t=>t.id===id(proposal.taskId)&&!t.isSection);if(!task)fail(404,'Task not found');
+    if(String(task.name||'').trim())fail(409,'This task already has a title. Preview again.');
+    const title=text(proposal.title,'task title',100);if(!title||/^new task$/i.test(title))fail(400,'Enter a specific task title');
+    task.name=title;
+   }else if(proposal.kind==='subtask'){
     const parent=state.tasks.find(t=>t.id===id(proposal.parentId));if(!parent)fail(404,'Parent task not found');
     const title=text(proposal.title,'subtask title',300);if(!title)fail(400,'Enter a subtask title');
+    if(state.tasks.some(t=>t.parentId===parent.id&&String(t.name||'').trim().toLowerCase()===title.toLowerCase()))fail(400,'A matching subtask already exists');
     if(next.tasks.length>=1000)fail(413,'Staging task limit reached');
     next.tasks.push({id:'sub_'+requestId,name:title,parentId:parent.id,isSection:false,done:false,date:parent.date||null,owner,order:Date.now()});
    }else try{const changed=relations.applyProposal(state.tasks,state.links,proposal,true);next.tasks=changed.nodes;next.links=changed.links;}

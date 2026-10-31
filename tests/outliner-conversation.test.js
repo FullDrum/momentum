@@ -94,3 +94,38 @@ test('transcription failures, empty audio and oversized requests fail safely',as
  await assert.rejects(transcribeAudio(req(new Uint8Array([1])),{OPENAI_API_KEY:'test-key'},'alice',repo,async()=>Response.json({text:''})),/No speech/);
  const large=new Request('https://staging.test/api/transcribe?taskId=freight',{method:'POST',headers:{'content-type':'audio/webm','content-length':String(11*1024*1024)},body:'x'});await assert.rejects(transcribeAudio(large,{OPENAI_API_KEY:'test-key'},'alice',repo),/too large/);
 });
+
+test('AI context explicitly includes root-to-parent ancestors even beyond the task list prefix',async()=>{
+ const {taskContext}=await chat;
+ const tasks=Array.from({length:205},(_,i)=>({id:'unrelated_'+i,name:'Unrelated '+i,parentId:null}));
+ tasks.push({id:'root',name:'Plant reliability',parentId:null,isSection:true},{id:'parent',name:'Transfer system',parentId:'root'},{id:'blank',name:'',parentId:'parent'});
+ const state={tasks,notes:[{id:'note',taskId:'blank',memory:{summary:'Pump is blocked'}}],messages:[{id:'private',taskId:'parent',role:'user',content:'Other conversation text',at:'2026-01-01'},{id:'m',taskId:'blank',role:'user',content:'Repair the pump',at:'2026-01-02'}]};
+ const context=taskContext(state,'blank');assert.deepEqual(context.ancestors.map(t=>t.id),['root','parent']);assert.equal(context.task.name,'');assert.equal(context.history.at(-1).content,'Repair the pump');assert.match(context.history[0].content,/Pump is blocked/);assert.doesNotMatch(JSON.stringify(context.history),/Other conversation text/);
+});
+test('high-confidence blank-task title is an inert suggestion until explicit approval; ID and history persist',async()=>{
+ const {repo}=await setup(),{nativeRpc}=await native,{saveMessage,answerMessage}=await chat,{execute}=await api;
+ const initial=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);
+ await nativeRpc(repo,'alice',{fn:'batchOps',requestId:'create_blank',expectedTree:initial.treeToken,arg:{saves:[{id:'blank',name:'',parentId:null,isSection:false,conversationStarted:true}],deletes:[]}},relations);
+ await saveMessage(repo,'alice',{taskId:'blank',text:'Repair the blocked transfer pump',requestId:'title_message'});
+ const result=await answerMessage(repo,'alice','blank','title_message',{OPENAI_API_KEY:'test-only'},async()=>Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'A pump repair task fits this goal.',proposals:[{kind:'title',targetId:null,title:'Repair transfer pump',reason:'The conversation identifies the equipment and action.',confidence:'high'}]})}]}]}));
+ assert.equal(result.messages.at(-1).proposals[0].kind,'title');assert.equal((await repo.read('alice')).state.tasks[0].name,'');
+ const {proposal}=await execute(repo,'alice','/api/preview',{taskId:'blank',kind:'title',title:'Repair transfer pump'},relations);
+ await assert.rejects(execute(repo,'alice','/api/apply',{requestId:'unapproved_title',proposal,approved:false},relations),/approval/);
+ const applied=await execute(repo,'alice','/api/apply',{requestId:'approved_title',proposal,approved:true},relations);assert.equal(applied.tasks.length,1);assert.equal(applied.tasks[0].id,'blank');assert.equal(applied.tasks[0].name,'Repair transfer pump');assert.equal(applied.tasks[0].parentId,null);
+ assert.equal((await repo.read('alice')).state.messages[0].taskId,'blank');
+ await assert.rejects(execute(repo,'alice','/api/preview',{taskId:'blank',kind:'title',title:'Replace existing title'},relations),/already has a title/);
+});
+test('insufficient information or low confidence leaves the New task placeholder unchanged',async()=>{
+ const {repo}=await setup(),{nativeRpc}=await native,{saveMessage,answerMessage}=await chat;
+ const initial=await nativeRpc(repo,'alice',{fn:'getInitialData'},relations);await nativeRpc(repo,'alice',{fn:'batchOps',requestId:'create',expectedTree:initial.treeToken,arg:{saves:[{id:'blank',name:'',parentId:null,isSection:false}],deletes:[]}},relations);
+ for(const [requestId,content,confidence] of [['low_info','Hi','high'],['low_confidence','Maybe consider several different plans','low']]){
+  await saveMessage(repo,'alice',{taskId:'blank',text:content,requestId});
+  const response=await answerMessage(repo,'alice','blank',requestId,{OPENAI_API_KEY:'test-only'},async()=>Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'What outcome do you want?',proposals:[{kind:'title',targetId:null,title:'Unjustified title',reason:'Not enough context',confidence}]})}]}]}));
+  assert.equal(response.messages.at(-1).proposals.length,0);assert.equal((await repo.read('alice')).state.tasks[0].name,'');
+ }
+});
+test('reviewed subtask proposals reject an existing matching child rather than proliferating tasks',async()=>{
+ const {repo}=await setup(),{execute}=await api;await seed(repo);
+ const preview=await execute(repo,'alice','/api/preview',{taskId:'freight',kind:'subtask',title:'Confirm booking'},relations);await execute(repo,'alice','/api/apply',{requestId:'first_child',proposal:preview.proposal,approved:true},relations);
+ await assert.rejects(execute(repo,'alice','/api/preview',{taskId:'freight',kind:'subtask',title:'Confirm booking'},relations),/matching subtask already exists/);assert.equal((await repo.read('alice')).state.tasks.length,3);
+});

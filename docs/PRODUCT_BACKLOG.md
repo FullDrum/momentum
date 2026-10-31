@@ -45,3 +45,7 @@ The existing Momentum outliner is the product foundation. The standalone staging
 ## Blank-task, audio and keyboard correction
 
 Staging retains untitled task IDs through blur, queue/reload and conversation recovery; the UI uses a New task placeholder. The normal conversation panel is compact, language selection is removed, and recorded clips use a server-only OpenAI transcription adapter with automatic language detection. Mobile viewport handling keeps editing controls above the keyboard. See `BLANK_AUDIO_MOBILE_REPORT.md` for results and the provider/physical-device blockers.
+
+## Compact chat and reviewed titles — 1 November 2026
+
+Version 4 uses a compact composer and explicit ancestor context. Blank-task title suggestions require confidence/evidence checks and explicit approval; matching subtasks are rejected. OpenAI Developers remains uninstalled and the staging API key is absent, so live AI/voice connection is incomplete. See `AI_VOICE_COMPACT_STATUS.md` for the configuration and verification status.

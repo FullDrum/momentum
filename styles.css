@@ -345,3 +345,7 @@ body.is-mobile.keyboard-open #mobileFab{display:none!important}
 body.is-mobile.keyboard-open #treeEl{padding-bottom:12px!important;scroll-padding-bottom:12px}
 body.is-mobile.keyboard-open #kbBar.active{display:flex!important;min-height:44px;max-height:48px;overflow-x:auto;gap:3px;padding:3px}
 body.is-mobile.keyboard-open .task-chat-log{max-height:56px}
+
+/* In mobile chat, the native Add control belongs in the toolbar, not over Send. */
+body.is-mobile.chat-open #mobileFab{position:static!important;inset:auto!important;flex-shrink:0!important;width:34px!important;height:36px!important;min-width:34px!important;min-height:36px!important;margin-right:6px!important;padding:0!important;font-size:24px!important;box-shadow:none!important}
+body.is-mobile.chat-open.keyboard-open #mobileFab{display:none!important}

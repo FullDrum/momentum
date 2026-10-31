@@ -1,0 +1,26 @@
+Momentum Next compact chat/provider status — 1 November 2026 (Pacific/Auckland)
+
+Node 22.23.4
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 399.771186
+
+Staging browser integration (provider and audio are mocked)
+PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; blank-task ID persistence and offline reload; automatic-language final audio transcription; keyboard-open/closed viewport controls; zero external requests/page errors.
+
+Canonical shell/PWA and historical prototype regression
+PASS: shared demo; cumulative speech; draft recovery; text save; suggestions; reviewed move/link; cycle rejection; quota recovery; mobile layout; no speech fallback; zero external requests; zero page errors.
+PASS: canonical application shell and inline conversation module; no capture dashboard.
+PASS: updated service-worker assets, sandbox navigation isolation and offline outliner shell.
+
+Additional final viewport check: app 839px, tree bottom 709px, navigation bottom 839px; all inside an 839px emulated viewport.
+Hosted version 4: succeeded; owner-private, one allowed owner, zero groups.
+OpenAI Developers: not installed. Site runtime variables: none, environment revision 0.
+Live AI, real audio recognition, physical Android keyboard/permission and signed-in deployed API tests are not complete.
