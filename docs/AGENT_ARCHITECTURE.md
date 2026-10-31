@@ -35,7 +35,7 @@ The agent reduces task-management effort; it must not create a second task syste
 Bobik and the Momentum agent should exchange task IDs, proposals and results through a documented interface. They should not rely on one another's hidden chat context as a data store. A ChatGPT dot cannot be assumed to call the app directly; the bridge is not implemented.
 
 ## Current implementation limits
-The branch currently has a client-only preview for moves/links. No relationship persistence, AI inference, direct Bobik channel, voice-command parser, or production deployment is implemented. The server-side task memory and transcript archive still require staging setup and testing.
+The development milestone now shares capture and structure logic between the task panel and a synthetic sandbox. The sandbox persists reviewed moves and links locally; the regular app previews structure and stores browser-local captures without server calls. Keyword suggestions are explainable and never apply changes automatically. AI inference, a direct Bobik channel, voice-command parsing and production integration remain unimplemented. Server-side task memory and transcript archive require disposable staging setup and testing. See `DEVELOPMENT_MILESTONE.md` for implementation, test results and boundaries.
 
 ## Acceptance scenarios
 - Ten Canadian freight replies can be proposed as children or related records under the decanter import goal, without duplicating them.

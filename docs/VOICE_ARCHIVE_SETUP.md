@@ -1,5 +1,7 @@
 # Voice archive deployment checklist (prototype branch)
 
+**31 October 2026 development update:** The current capture UI saves browser-local drafts and notes only; it does not invoke these archive or memory routes. The instructions below describe the historical staging backend and remain prerequisites for a future staging adapter. They do not authorize production setup or deployment. Local originals currently have no automatic expiry.
+
 The transcript archive is separate from the Momentum nodes spreadsheet.
 
 1. Create a dedicated Google spreadsheet accessible only to the deployment owner.

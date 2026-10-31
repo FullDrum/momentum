@@ -1,0 +1,20 @@
+Momentum Next development validation — 31 October 2026 (Pacific/Auckland)
+
+Node 22.23.4 — npm test
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 289.814122
+
+Chromium — npm run test:browser
+PASS: shared demo; cumulative speech; draft recovery; text save; suggestions; reviewed move/link; cycle rejection; quota recovery; mobile layout; no speech fallback; zero external requests; zero page errors.
+PASS: actual application startup and task modal without production access.
+PASS: service-worker assets, sandbox navigation isolation, offline application capture.
+
+Recognition events were simulated. External traffic was blocked. No live backend or production data was used.

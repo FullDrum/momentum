@@ -2,6 +2,10 @@
   "name": "momentum",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node scripts/browser-test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
   }
 }

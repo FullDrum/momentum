@@ -29,3 +29,7 @@ Momentum supports variable daily priorities in a waste-processing business. Inco
 
 ## Not yet built
 Production photo storage; worker sharing/permissions UX; per-person priority queues; AI orchestration; drag-and-drop in production; full cross-project dependency planner.
+
+## Development milestone — 31 October 2026
+
+Implemented on `dev/voice-capture-structure-milestone`: recoverable browser-local voice/text capture, explainable keyword suggestions, and shared reviewed structure logic in a synthetic sandbox. Capture and structure have Node and Chromium tests. Regular application capture does not call the backend; task creation and applied moves/links are sandbox-only. See `DEVELOPMENT_MILESTONE.md` for validation and next steps. Remaining priorities above still require staging integrations before production rollout.

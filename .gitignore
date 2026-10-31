@@ -7,3 +7,7 @@
 
 # Local Apps Script exports may contain a Sheet ID or other private settings.
 .private/
+
+# Development scratch files and optional browser test dependencies.
+/work/
+/node_modules/

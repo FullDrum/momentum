@@ -1,4 +1,4 @@
-const CACHE_NAME = 'momentum-v38';
+const CACHE_NAME = 'momentum-v39';
 const APP_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const APP_ASSETS = [
   './core.js',
   './app.js',
   './voice-task.js',
+  './voice-capture.js',
+  './voice-task.css',
   './task-memory.js',
   './task-relations.js',
   './manifest.json',
@@ -44,10 +46,15 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
+          var appRoot = new URL('./', self.location.href).pathname;
+          var cacheKey = url.pathname === appRoot || url.pathname === appRoot + 'index.html' ? './index.html' : event.request;
+          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(cacheKey, response.clone()));
           return response;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => {
+          var appRoot = new URL('./', self.location.href).pathname;
+          return caches.match(url.pathname === appRoot || url.pathname === appRoot + 'index.html' ? './index.html' : event.request);
+        })
     );
     return;
   }
