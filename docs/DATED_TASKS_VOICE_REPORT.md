@@ -34,3 +34,12 @@ The publishing tools can verify deployment and configured secret presence, but t
 4. Record Russian, English and mixed speech. Stop must leave editable unsent text; record again and Send must transcribe and submit once. Check repeated taps, denied permission, network failure and keyboard visibility.
 
 Live OpenAI output quality, real phone audio accuracy and physical Android IME behavior are not claimed as verified in this milestone.
+
+## Published review build
+
+- Staging version **5**, successful publication using existing environment revision **4**.
+- URL: https://momentum-next-staging-nikita.workspace-755223.chatgpt.site
+- FullDrum feature branch: `feature/dated-ai-tasks-voice-send`; PR target: `dev/voice-capture-structure-milestone`.
+- Dedicated hosting-source commit: `e1a6f96b34902646601711238b1b26c984ca4ffe`. The packaged Worker hash matches the tested build (`fd1ca1cbad5072e12fd4e503955137f6ac7a8fbfff8f64ec5c39f7531e9c8a52`).
+- Screenshots use synthetic test data: [recording Stop/Send](screenshots/voice-recording-stop-send.png), [approved dated tasks](screenshots/dated-tasks-approved-mobile.png).
+- GitHub review workflow is recorded in repository `AGENTS.md`. No production merge was performed.
