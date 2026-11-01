@@ -15,9 +15,10 @@ export function creationPreview(state,revision,body){
   if(parentId&&!state.tasks.some(t=>t.id===parentId))fail(404,'Parent task not found');
   const taskId=reuse&&index===0?origin.id:null;
   if(taskId&&parentId===taskId)fail(400,'A task cannot be its own parent');
-  const date=taskDate(p.date,today).slice(0,10),key=JSON.stringify([title.toLowerCase(),parentId,date]);
+  const defaultDate=taskId?taskDate(origin.date,today).slice(0,10):today;
+  const date=taskDate(p.date,defaultDate).slice(0,10),key=JSON.stringify([title.toLowerCase(),parentId,date]);
   if(seen.has(key)||state.tasks.some(t=>t.id!==taskId&&String(t.name||'').trim().toLowerCase()===title.toLowerCase()&&(t.parentId||null)===parentId&&t.date?.slice(0,10)===date))fail(409,'A matching dated task already exists');
-  seen.add(key);return {title,parentId,parentName:parentId?state.tasks.find(t=>t.id===parentId).name:'Root (independent task)',date,taskId,fromParentId:taskId?origin.parentId||null:null};
+  seen.add(key);return {title,parentId,parentName:parentId?state.tasks.find(t=>t.id===parentId).name:'Root (independent task)',date,taskId,fromParentId:taskId?origin.parentId||null:null,fromParentName:taskId&&origin.parentId?(state.tasks.find(t=>t.id===origin.parentId)?.name||'New task'):'Root'};
  });
  return {kind:'create_tasks',taskId:origin.id,sourceMessageId:source.id,today,tasks,baseRevision:revision,requiresApproval:true};
 }

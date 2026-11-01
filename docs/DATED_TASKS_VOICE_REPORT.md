@@ -43,3 +43,13 @@ Live OpenAI output quality, real phone audio accuracy and physical Android IME b
 - Dedicated hosting-source commit: `e1a6f96b34902646601711238b1b26c984ca4ffe`. The packaged Worker hash matches the tested build (`fd1ca1cbad5072e12fd4e503955137f6ac7a8fbfff8f64ec5c39f7531e9c8a52`).
 - Screenshots use synthetic test data: [recording Stop/Send](screenshots/voice-recording-stop-send.png), [approved dated tasks](screenshots/dated-tasks-approved-mobile.png).
 - GitHub review workflow is recorded in repository `AGENTS.md`. No production merge was performed.
+
+## PR #9 QA follow-up — 1 November 2026
+
+- Fixed partial native task saves: start from the persisted task and apply supplied fields before whitelist validation. Omitted dates (and hierarchy/flags) are retained; newly created tasks without a date default to Today. Explicit dates reschedule normally; explicit null/empty dates mean Today, never an undated task. This matches the normal client contract (`MomentumCore.enqueueSave` and `flushBatch` copy full snapshots) while safely handling older/partial saves.
+- Added SQLite regressions for `2026-11-10` → title-only save with omitted date → reload with `2026-11-10`, new tasks defaulting Today, explicit rescheduling, and retained non-date fields.
+- Nested blank-node reuse now includes the named previous parent in the visible preview. Tests verify no move before approval, rejection of unapproved/tampered plans, and retained ID/history after approved move and reload. Reused blank nodes also retain an existing scheduled day unless the proposal explicitly reschedules them; other newly created tasks default Today.
+- Investigated Actions **run #43**, ID `41267513782`, job `124733289507`: 136/137 cases passed; the failure was `ENOENT` reading `staging/dist/server/index.js` in `tests/outliner-conversation.test.js:68`. That generated file is Git-ignored. CI ran `npm test` on a clean checkout without building, whereas local testing had built it first. It was a missing build prerequisite, not an OpenAI credential or date-test failure.
+- Added `pretest: npm run staging:build`, so the same plain `npm test` prepares the artifact locally and in CI without installing browser dependencies or using secrets.
+- Reproduced the old failure from a clean Git archive, including Node **22.23.4**, matching Actions. A separate clean archive plus the patch passes plain `npm test` on Node 22.23.4: 15 test files, zero failures. Working-tree Node 24 tests also pass.
+- Extended the staging browser harness with actual partial-batch date persistence, nested blank-node named move preview, approval, reload and history retention. Real provider responses and physical Android remain unverified.

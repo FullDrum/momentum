@@ -61,3 +61,35 @@ test('explicit future schedule and requested project are preserved; stale plans 
  await batch(repo,[{id:'other',name:'Other change',parentId:null}],'concurrent');await assert.rejects(execute(repo,'alice','/api/apply',{requestId:'stale',approved:true,proposal},relations),/another device/);
  const fresh=await preview(repo,source);const result=await execute(repo,'alice','/api/apply',{requestId:'future',approved:true,proposal:fresh},relations);assert.equal(result.created[0].date,'2026-11-10');assert.equal(result.tasks.find(t=>t.id==='project').date,'2026-12-25');
 });
+
+test('partial title saves retain explicit dates and hierarchy across SQLite reload; new tasks default Today and explicit rescheduling works',async()=>{
+ const {repo}=await setup();await batch(repo,[{id:'project',name:'Canada',date:'2026-12-25'},{id:'scheduled',name:'Original title',date:'2026-11-10',parentId:'project',done:true,order:42,conversationStarted:true}]);
+ // Matches batchOps saves from the durable outliner queue, with date intentionally omitted.
+ await batch(repo,[{id:'scheduled',name:'Renamed only'},{id:'new_without_date',name:'New dated task'}],'partial');
+ const reload=await (await native).nativeRpc(repo,'alice',{fn:'getInitialData'},relations),saved=reload.nodes.find(n=>n.id==='scheduled');
+ assert.equal(saved.name,'Renamed only');assert.equal(saved.date,'2026-11-10');assert.equal(saved.parentId,'project');assert.equal(saved.done,true);assert.equal(saved.order,42);assert.equal(saved.conversationStarted,true);assert.equal(reload.nodes.find(n=>n.id==='new_without_date').date,today);
+ await batch(repo,[{id:'scheduled',name:'Explicitly rescheduled',date:'2026-11-20'}],'reschedule');assert.equal((await repo.read('alice')).state.tasks.find(n=>n.id==='scheduled').date,'2026-11-20');
+ await batch(repo,[{id:'scheduled',date:undefined,name:'Still scheduled'}],'undefined_date');assert.equal((await repo.read('alice')).state.tasks.find(n=>n.id==='scheduled').date,'2026-11-20');
+ await batch(repo,[{id:'scheduled',date:null}],'explicit_today');assert.equal((await repo.read('alice')).state.tasks.find(n=>n.id==='scheduled').date,today);
+});
+
+test('nested blank reuse shows its old parent and requires approval before moving to root; stable ID and history survive reload',async()=>{
+ const {repo}=await setup();await batch(repo,[{id:'project',name:'Canada project',date:'2026-11-10',parentId:null},{id:'blank',name:'',date:today,parentId:'project',conversationStarted:true}]);
+ const source=await suggest(repo);const proposal=await preview(repo,source),first=proposal.tasks[0];
+ assert.equal(first.taskId,'blank');assert.equal(first.fromParentId,'project');assert.equal(first.fromParentName,'Canada project');assert.equal(first.parentId,null);assert.equal(first.parentName,'Root (independent task)');assert.equal(proposal.requiresApproval,true);
+ assert.equal((await repo.read('alice')).state.tasks.find(t=>t.id==='blank').parentId,'project');
+ const {execute}=await api;await assert.rejects(execute(repo,'alice','/api/apply',{requestId:'nested_unapproved',approved:false,proposal},relations),/approval/);
+ const hiddenMove=structuredClone(proposal);hiddenMove.tasks[0].fromParentId=null;await assert.rejects(execute(repo,'alice','/api/apply',{requestId:'hidden_move',approved:true,proposal:hiddenMove},relations),/changed/);
+ assert.equal((await repo.read('alice')).state.tasks.find(t=>t.id==='blank').parentId,'project');
+ const result=await execute(repo,'alice','/api/apply',{requestId:'nested_approved',approved:true,proposal},relations);assert.equal(result.created[0].id,'blank');assert.equal(result.created[0].parentId,null);
+ const reload=await (await native).nativeRpc(repo,'alice',{fn:'getInitialData'},relations);assert.equal(reload.nodes.find(n=>n.id==='blank').parentId,null);assert.equal(reload.nodes.find(n=>n.id==='blank').hasConversation,true);assert.equal(reload.nodes.find(n=>n.id==='project').date,'2026-11-10');
+ const history=(await repo.read('alice')).state.messages.filter(m=>m.taskId==='blank');assert.equal(history[0].content,phrase);assert.equal(history.at(-1).creationResult[0].id,'blank');
+});
+
+test('blank reuse preserves its existing future work-list date unless explicitly rescheduled; other new tasks still get Today',async()=>{
+ const {repo}=await setup();await batch(repo,[{id:'blank',name:'',parentId:null,date:'2026-11-10',conversationStarted:true}]);const source=await suggest(repo),proposal=await preview(repo,source);
+ assert.equal(proposal.tasks[0].date,'2026-11-10');assert.ok(proposal.tasks.slice(1).every(t=>t.date===today));
+ const result=await (await api).execute(repo,'alice','/api/apply',{requestId:'preserve_blank_date',approved:true,proposal},relations);assert.equal(result.created[0].date,'2026-11-10');
+ const reschedule=await setup();await batch(reschedule.repo,[{id:'blank',name:'',parentId:null,date:'2026-11-10'}]);const explicit=await suggest(reschedule.repo,{input:'Перенеси идею на 20 ноября',proposals:[{kind:'create_task',title:'Rescheduled idea',targetId:null,date:'2026-11-20',reason:'Explicit date',confidence:'high'}]});
+ const changed=await preview(reschedule.repo,explicit);assert.equal(changed.tasks[0].date,'2026-11-20');await (await api).execute(reschedule.repo,'alice','/api/apply',{requestId:'reschedule_blank',approved:true,proposal:changed},relations);assert.equal((await reschedule.repo.read('alice')).state.tasks[0].date,'2026-11-20');
+});
