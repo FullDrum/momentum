@@ -98,3 +98,13 @@ The server now builds explicit root-to-parent ancestor context independently of 
 For an empty task, the AI schema supports a short title suggestion with high confidence. The server rejects title suggestions for already-titled tasks, low-confidence output, insufficient user evidence, empty/generic placeholders or overlong titles. A title stays a suggestion until Preview and explicit Approve. Approval changes only the title; the ID, parent and conversation remain. If there is insufficient information, the stored title remains empty and the UI retains New task. Matching child titles are rejected in reviewed subtask creation to avoid redundant tasks. Manual outliner editing remains unchanged.
 
 **Real AI/voice connection remains incomplete:** the plugin directory reports OpenAI Developers as not installed, no OpenAI skill/tools are available in this session, and the Site has no runtime `OPENAI_API_KEY`. Install OpenAI Developers to enable its supported key workflow, then configure the isolated Site secret and publish the environment revision. Do not paste keys into chat or browser code. Existing text/history functionality is independent of that configuration. Automated provider responses are mocked and do not demonstrate a live OpenAI connection.
+
+## Dated tasks and voice Stop/Send — 1 November 2026
+
+Current staging has a configured server-side `OPENAI_API_KEY` (presence only was checked); earlier missing-key statements above describe historical milestones. The environment revision was applied before this milestone. No key was created or changed here.
+
+Task creation is now a persisted assistant-proposal batch: preview exact titles, parents and work-list dates, then explicitly approve. The server writes atomically, rejects stale/tampered plans, returns persisted task IDs and prevents duplicate applications. The client refreshes and verifies those records before reporting success. Empty conversation nodes can supply the first stable task ID. Manual/AI/converted/parent/subtasks default to Today; dates do not follow hierarchy. Existing undated staging tasks are dated on load. Browser calendar day is used, with Pacific/Auckland fallback; a work-list date is not a deadline.
+
+Recording Stop transcribes to the editable draft only. Recording Send finishes, transcribes and submits once; both controls stay visible during recording. Timed stops and recovered transcription retries remain review-only. OpenAI automatic-language transcription is preserved.
+
+See `docs/DATED_TASKS_VOICE_REPORT.md` in the FullDrum development repository for acceptance tests and physical Android/live-provider checks still needed.
