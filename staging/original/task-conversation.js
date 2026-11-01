@@ -20,7 +20,7 @@
   if(p.focused){p.input.focus({preventScroll:true});p.input.setSelectionRange(p.start,p.end);p.focused=false;}
  }
  function messages(p,data){
-  if(!still(p))return;p.log.replaceChildren();p.older.replaceChildren();p.suggestions.replaceChildren();
+  if(!still(p))return;p.qaMessages=data.messages||[];p.log.replaceChildren();p.older.replaceChildren();p.suggestions.replaceChildren();
   var history=data.messages||[];history.forEach(function(message,index){
    var item=el('div',null,'task-chat-message'),heading=el('strong',message.role==='assistant'?(message.status==='failed'?'AI unavailable':message.status==='pending'?'AI pending':'AI'):message.role==='legacy'?'Earlier note':'You');
    item.append(heading,el('div',message.content));
@@ -65,7 +65,8 @@
   p.key='momentum_task_conversation_draft_v1:'+encodeURIComponent(p.account)+':'+id;
   p.element=el('section',null,'task-conversation');p.element.id='task-conversation-panel';p.element.setAttribute('role','region');p.element.setAttribute('aria-labelledby','task-chat-title');
   p.title=el('strong','Conversation · '+(String(node.name||'').trim()||'New task'));p.title.id='task-chat-title';
-  p.health=el('span','','task-chat-health');var heading=el('div',null,'task-chat-heading'),dismiss=el('button','×');dismiss.setAttribute('aria-label','Close conversation');dismiss.type='button';dismiss.onclick=function(){close();};if(window.MomentumQA){var report=el('button','Report / QA');report.type='button';report.className='qa-report-button';report.onclick=function(){p.audio.cancel();MomentumQA.report(p.id,p.input.value);};heading.append(p.title,p.health,report,dismiss);}else heading.append(p.title,p.health,dismiss);
+  p.health=el('span','','task-chat-health');var heading=el('div',null,'task-chat-heading'),dismiss=el('button','×');dismiss.setAttribute('aria-label','Close conversation');dismiss.type='button';dismiss.onclick=function(){close();};if(window.MomentumQA){var report=el('button','Report to QA');report.type='button';report.className='qa-report-button';report.onclick=function(){p.audio.cancel();MomentumQA.report(p.id,report,p.qaStatus,p.qaMessages);};heading.append(p.title,p.health,report,dismiss);}else heading.append(p.title,p.health,dismiss);
+  p.qaStatus=el('div','Whole task chat → private QA','qa-inline-status');p.qaStatus.setAttribute('role','status');p.qaStatus.setAttribute('aria-live','polite');report&&report.setAttribute('aria-describedby','task-qa-disclosure');p.qaStatus.id='task-qa-disclosure';p.qaStatus.hidden=!window.MomentumQA;
   p.log=el('div',null,'task-chat-log');p.log.setAttribute('aria-label','Conversation history');p.log.tabIndex=0;
   p.status=el('p','Loading…','task-chat-muted');p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
   var label=el('label','Message about this task');label.htmlFor='task-chat-input';label.className='task-chat-label';p.input=el('textarea');p.input.id='task-chat-input';p.input.rows=1;p.input.maxLength=12000;p.input.placeholder='Message…';
@@ -111,7 +112,7 @@
   p.structure.append(p.kind,p.target,p.proposedTitle,p.date,previewButton,p.preview,p.approve);
   p.history=el('details',null,'task-chat-history');p.history.append(el('summary','History'));p.configNote=el('p','','task-chat-muted');p.history.append(p.configNote);p.older=el('div',null,'task-chat-older');p.history.append(p.older,refresh,p.retry);
   controls.append(mic,send);var compose=el('div',null,'task-chat-compose');compose.append(label,p.input,controls,p.audioStatus);
-  var advanced=el('div',null,'task-chat-advanced');advanced.append(p.history,p.structure);p.element.append(heading,p.log,p.status,compose,advanced);
+  var advanced=el('div',null,'task-chat-advanced');advanced.append(p.history,p.structure);p.element.append(heading,p.qaStatus,p.log,p.status,compose,advanced);
   p.element.addEventListener('keydown',function(event){event.stopPropagation();if(event.key==='Escape'){event.preventDefault();close();}else if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();submit();}});
   ['click','mousedown','pointerdown','touchstart'].forEach(function(type){p.element.addEventListener(type,function(e){e.stopPropagation();});});
   active=p;if(window.MomentumViewport)window.MomentumViewport.setChatOpen(true);reconcile();p.input.focus({preventScroll:true});p.element.scrollIntoView({block:'nearest'});

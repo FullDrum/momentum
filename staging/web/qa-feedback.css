@@ -2,3 +2,4 @@
 .task-chat-heading>button.qa-report-button{font-size:11px;padding:4px 6px;white-space:nowrap;flex-shrink:0}
 .toolbar>.qa-inbox-button{flex:none;padding:4px 6px;font-size:11px}.chat-open .toolbar>.qa-inbox-button{display:none}
 .qa-dialog h3{overflow-wrap:anywhere;font-size:13px;margin:4px 0}.qa-dialog button,.qa-dialog a{box-sizing:border-box}
+.qa-inline-status{font-size:10px;color:var(--text2);overflow-wrap:anywhere;margin:2px 0}.qa-inline-status button{font-size:10px;min-height:24px;padding:2px 5px}.qa-snapshot-message{border-bottom:1px solid var(--border);padding:6px 0}.qa-snapshot-message strong{font-size:11px}.qa-snapshot-message pre{font:13px system-ui}

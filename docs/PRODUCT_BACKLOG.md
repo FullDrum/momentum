@@ -57,3 +57,7 @@ Every persisted task must have a work-list date, default Today, independently of
 ## In-app private QA — Issue #10 MVP
 
 Staging has an explicit Report / QA workflow, editable opt-in excerpt preview, account-scoped persistent inbox, deduplicated retries, private replies, manual lifecycle and fixed-text public GitHub drafts. No automatic ChatGPT review, public conversation export or background submissions. See `PRIVATE_QA_FEEDBACK.md` for the security boundary, acceptance demo and connector/automation limitations.
+
+## PR #11 acceptance correction — whole-chat one-click QA
+
+The user rejected the excerpt form. Report to QA now directly submits a private snapshot of the full selected task conversation, including older History turns, with inline confirmation and no form/checkbox/preview step. Explicit click consent, account isolation, frozen retry snapshots and the opaque-only public GitHub boundary remain enforced. Histories over 1,000 messages / 200 KB fail clearly without truncation. The private-reviewer connector remains deferred; see `PRIVATE_QA_FEEDBACK.md`.

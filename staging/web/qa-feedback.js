@@ -1,7 +1,7 @@
 /* Private staging QA. Public handoffs use only server-generated fixed text. */
 (function(){
- 'use strict';var active=null;
- var types={hierarchy:'AI hierarchy',dates:'Task dates',voice:'Voice',interface:'Interface',other:'Other'};
+ 'use strict';var active=null,reporting=new Set();
+ var types={conversation:'Task conversation',hierarchy:'AI hierarchy',dates:'Task dates',voice:'Voice',interface:'Interface',other:'Other'};
  var statuses=['submitted','triaged','proposed_fix','codex_pr','qa_checked','resolved'];
  function el(tag,text){var n=document.createElement(tag);if(text!=null)n.textContent=text;return n;}
  function button(text,fn){var n=el('button',text);n.type='button';n.onclick=fn;return n;}
@@ -19,52 +19,35 @@
  function storage(p,key,value){try{if(value===undefined)return JSON.parse(localStorage.getItem(key)||'null');localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){p.status.textContent='Browser draft storage is unavailable. Keep a copy before closing.';return null;}}
  function previewBlock(title,value){var box=el('details'),pre=el('pre',value);box.open=true;box.append(el('summary',title),pre);return box;}
  function fail(p,error){if(p.alive())p.status.textContent=error.message+' Your draft is kept. Retry explicitly when connected.';}
- async function report(taskId,observation){
-  var p=mount('Report / QA');if(!p)return;
-  var key='momentum_qa_draft_v1:'+encodeURIComponent(p.owner)+':'+taskId,recovered=storage(p,key)||{},pending=recovered.pending||null,preview=null,busy=false;
-  var category=el('select');category.setAttribute('aria-label','QA category');Object.keys(types).forEach(function(k){var o=el('option',types[k]);o.value=k;category.append(o);});category.value=recovered.type||'hierarchy';
-  var note=el('textarea');note.rows=3;note.maxLength=2000;note.setAttribute('aria-label','QA observation and expected behavior');note.value=recovered.observation||observation||'';
-  var excerptList=el('div'),chosen=(recovered.excerpts||[]).slice(0,2),review=el('div');
-  p.main.append(el('p','Private staging report. Choose any short excerpts to include. No full history or audio. Nothing is sent to GitHub.'),label('Category',category),label('Problem / expected behavior',note),el('p','Task ID: '+taskId),excerptList,review);
-  var choices=[];
-  function values(){return {type:category.value,taskId:taskId,observation:note.value,excerpts:choices.filter(function(c){return c.check.checked;}).map(function(c){return {messageId:c.id,text:c.input.value};})};}
-  function save(){if(!p.alive())return;storage(p,key,Object.assign(values(),{pending:pending}));}
-  p.save=save;
-  function formBusy(value){busy=value;category.disabled=note.disabled=value;choices.forEach(function(c){c.check.disabled=c.input.disabled=value;});}
-  function changed(){preview=null;pending=null;review.replaceChildren();send.disabled=true;save();}
-  var inspect=button('Preview private report',async function(){
-   if(busy||!p.alive())return;formBusy(true);inspect.disabled=true;
-   try{await MomentumStaging.sync();var body=Object.assign(values(),{id:pending?pending.id:'qa_'+crypto.randomUUID()});var data=await MomentumStaging.api('feedback/preview',body);if(!p.alive())return;
-    preview=data.draft;note.value=preview.observation;preview.excerpts.forEach(function(e){var c=choices.find(function(c){return c.id===e.messageId;});if(c)c.input.value=e.text;});
-    review.replaceChildren(previewBlock('Exact private submission (redacted)',JSON.stringify(preview,null,2)),el('p','Review this content for private information. Common keys, tokens, URLs and emails are redacted; you must remove anything else you do not want stored.'));
-    send.disabled=false;save();
-   }catch(error){fail(p,error);}finally{formBusy(false);inspect.disabled=false;}
-  });
-  var send=button('Send to QA',async function(){
-   if(busy||!p.alive()||!preview)return;formBusy(true);send.disabled=true;inspect.disabled=true;
-   pending=preview;if(!storage(p,key,Object.assign(values(),{pending:pending}))){formBusy(false);inspect.disabled=false;send.disabled=false;return;}
-   try{var data=await MomentumStaging.api('feedback/submit',Object.assign({},pending,{approved:true}));if(!p.alive())return;
-    pending=null;p.save=null;localStorage.removeItem(key);showReport(p,data.report);p.status.textContent='QA report saved: '+data.report.id+' · submitted';
-   }catch(error){fail(p,error);send.disabled=false;}finally{formBusy(false);inspect.disabled=false;}
-  });send.disabled=true;p.footer.append(inspect,send,button('QA inbox',function(){inbox();}));
-  category.onchange=note.oninput=changed;p.status.textContent='Loading available excerpts…';
-  try{await MomentumStaging.sync();var data=await MomentumStaging.api('conversation?taskId='+encodeURIComponent(taskId));if(!p.alive())return;
-   var eligible=(data.messages||[]).filter(function(m){return ['user','assistant'].includes(m.role)&&m.content;});
-   if(!note.value&&!recovered.observation){var recentUser=eligible.filter(function(m){return m.role==='user';}).at(-1);if(recentUser)note.value=recentUser.content.slice(0,2000);}
-   var messages=eligible.filter(function(m){return eligible.slice(-2).includes(m)||chosen.some(function(e){return e.messageId===m.id;});});
-   messages.forEach(function(m){var check=el('input');check.type='checkbox';check.setAttribute('aria-label','Include '+m.role+' excerpt');var input=el('textarea');input.maxLength=600;input.rows=2;input.setAttribute('aria-label','Editable '+m.role+' excerpt');var prior=chosen.find(function(e){return e.messageId===m.id;});check.checked=!!prior;input.value=prior?prior.text:m.content.slice(0,600);input.hidden=!check.checked;
-    var choice={id:m.id,check:check,input:input};choices.push(choice);check.onchange=function(){input.hidden=!check.checked;changed();};input.oninput=changed;excerptList.append(label('Include '+m.role+' excerpt',check),input);
-   });
-   if(!messages.length)excerptList.append(el('p','No messages selected. You can report the interface without an excerpt.'));
-   p.status.textContent=pending?'A previous submission was not confirmed. Preview and explicitly retry the same ticket.':'Build: '+(await MomentumStaging.api('feedback')).buildId;
-   save();
-  }catch(error){fail(p,error);}
+ async function report(taskId,control,indicator,messages){
+  var owner=identity();if(!owner||reporting.has(taskId))return;
+  reporting.add(taskId);control.disabled=true;indicator.textContent='Saving whole task chat privately…';
+  var key='momentum_qa_full_report_v1:'+encodeURIComponent(owner)+':'+taskId;
+  function current(){return identity()===owner&&indicator.isConnected;}
+  try{
+   var bytes=new TextEncoder().encode(JSON.stringify(messages||[]));
+   var cursor=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+   var saved=JSON.parse(localStorage.getItem(key)||'null');
+   var pending=saved&&(!saved.done||saved.cursor===cursor)?saved:{id:'qa_'+crypto.randomUUID(),cursor:cursor,done:false};
+   localStorage.setItem(key,JSON.stringify(pending));
+   await MomentumStaging.sync();if(identity()!==owner)return;
+   var data=await MomentumStaging.api('feedback/report',{id:pending.id,taskId:taskId,scope:'full_task_conversation',approved:true});
+   if(identity()!==owner)return;pending.done=true;pending.ticketId=data.report.id;
+   // The pending ID is already durable; cache completion must not hide a confirmed write.
+   try{localStorage.setItem(key,JSON.stringify(pending));}catch(_){}
+   if(current()){
+    indicator.replaceChildren(el('span','QA saved · '+data.report.id+' · '+data.report.snapshot.messages.length+' messages '),button('Private QA inbox',function(){openReport(data.report.id);}));
+   }
+  }catch(error){if(current())indicator.textContent='QA not confirmed: '+error.message+' Tap Report to QA to retry; no automatic retry.';}
+  finally{reporting.delete(taskId);control.disabled=false;if(window.MomentumViewport)MomentumViewport.refresh();}
  }
+ async function openReport(id){var p=mount('Private QA report');if(!p)return;p.status.textContent='Loading…';try{var data=await MomentumStaging.api('feedback?id='+encodeURIComponent(id));if(p.alive()){showReport(p,data.report);p.status.textContent='';}}catch(error){fail(p,error);}}
  function showReport(p,record){
   if(!p.alive())return;if(p.save)p.save();p.save=null;p.main.replaceChildren();p.footer.replaceChildren();
   p.main.append(el('h3',record.id),el('p','Status: '+record.status.replaceAll('_',' ')+' · Build: '+record.buildId),el('p','Task ID: '+record.taskId),el('p','Created: '+record.createdAt),previewBlock('Private observation',record.observation));
+  if(record.snapshot){var history=el('details');history.open=true;history.append(el('summary','Full task conversation ('+record.snapshot.messages.length+' messages)'));record.snapshot.messages.forEach(function(m){var entry=el('section');entry.className='qa-snapshot-message';entry.append(el('strong',m.role+' · '+(m.at||'timestamp unavailable')+(m.status?' · '+m.status:'')),el('pre',m.content));if(m.proposals&&m.proposals.length)entry.append(previewBlock('Proposals',JSON.stringify(m.proposals,null,2)));history.append(entry);});p.main.append(history);}
   if(record.excerpts.length)p.main.append(previewBlock('Consented excerpts',record.excerpts.map(function(e){return e.role+': '+e.text;}).join('\n\n')));
-  var conversation=button('Open linked conversation',function(){p.close();var n=nodes.find(function(n){return n.id===record.taskId;});if(!n){showStatusBanner('The task was removed; this QA report retains its consented excerpt.','error');return;}activeTab='tree';var parent=n.parentId,seen=new Set();while(parent&&!seen.has(parent)){seen.add(parent);collapsed[parent]=false;var node=nodes.find(function(n){return n.id===parent;});parent=node&&node.parentId;}render();MomentumConversations.open(record.taskId);});p.main.append(conversation);
+  var conversation=button('Open linked conversation',function(){p.close();var n=nodes.find(function(n){return n.id===record.taskId;});if(!n){showStatusBanner('The task was removed; this QA report retains its private snapshot.','error');return;}activeTab='tree';var parent=n.parentId,seen=new Set();while(parent&&!seen.has(parent)){seen.add(parent);collapsed[parent]=false;var node=nodes.find(function(n){return n.id===parent;});parent=node&&node.parentId;}render();MomentumConversations.open(record.taskId);});p.main.append(conversation);
   var publicBox=previewBlock('Public GitHub handoff — fixed text only',record.publicReference.title+'\n\n'+record.publicReference.body);publicBox.open=false;
   publicBox.append(el('p','This next action opens a public GitHub draft; it does not submit it. Only the fixed text above is included. Never add private context there.'));
   var handoff=el('a','Open sanitized GitHub draft');handoff.href=record.publicReference.url;handoff.target='_blank';handoff.rel='noopener noreferrer';publicBox.append(handoff);p.main.append(publicBox);
@@ -79,6 +62,7 @@
   p.main.scrollTop=0;p.footer.append(button('QA inbox',function(){inbox();}),button('Refresh report',async function(){try{var data=await MomentumStaging.api('feedback?id='+encodeURIComponent(record.id));if(p.alive())showReport(p,data.report);}catch(error){fail(p,error);}}));
  }
  async function inbox(){var p=mount('Private QA inbox');if(!p)return;p.status.textContent='Loading QA inbox…';try{var data=await MomentumStaging.api('feedback');if(!p.alive())return;p.status.textContent='Build: '+data.buildId;
+  var help=previewBlock('QA privacy help','Report to QA immediately saves the entire selected task chat privately, including older History turns. The click is your consent. Other tasks, unsent drafts, raw recordings and attachments are excluded. Credentials are redacted; nothing is silently truncated. GitHub receives only a fixed ticket/category/build reference. ChatGPT/private reviewer access is not connected.');help.open=false;p.main.append(help);
   p.main.append(el('p','Submitted reports stay in your staging account. Status is updated manually by an authorized reviewer; there is no automatic ChatGPT review.'));
   if(!data.items.length)p.main.append(el('p','No QA reports submitted.'));
   data.items.forEach(function(item){p.main.append(button(item.id+' · '+item.status.replaceAll('_',' ')+' · '+types[item.type],async function(){try{var data=await MomentumStaging.api('feedback?id='+encodeURIComponent(item.id));if(p.alive())showReport(p,data.report);}catch(error){fail(p,error);}}));});

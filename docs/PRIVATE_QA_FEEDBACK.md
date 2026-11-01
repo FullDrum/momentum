@@ -1,41 +1,36 @@
-# Private in-app QA feedback — Issue #10 MVP
+# Private in-app QA — one-click full task conversation
 
-Implemented on `feature/private-qa-feedback`, based on PR #9's unmerged head `3ebd26a` so the existing dated-task and voice fixes are retained. The PR targets `dev/voice-capture-structure-milestone`. No production merge, Google data/Apps Script access, key creation or secret change.
+This acceptance update on PR #11 supersedes the earlier excerpt/preview workflow, following [the user's acceptance feedback](https://github.com/FullDrum/momentum/pull/11#issuecomment-6556446830). It remains on `feature/private-qa-feedback`, targets `dev/voice-capture-structure-milestone` and retains the unmerged PR #9 dependency. No production merge, production data/Apps Script access, key creation or secret change.
 
-## User workflow
+## Current workflow
 
-1. In a contextual task conversation, tap **Report / QA**. Recording is cancelled before opening QA. Edit the observation/expected behavior (initially the current draft or latest user message). Choose a category. Conversation excerpts are unchecked by default; optionally select/edit up to two short excerpts.
-2. Tap **Preview private report**. Inspect the exact allowlisted, redacted submission, including the stable task ID and current build ID. Preview stores no report. Editing invalidates the preview.
-3. Tap **Send to QA** explicitly. A successful atomic write returns an opaque ticket ID and `submitted` status. Nothing is sent to GitHub or the AI. Failed/offline submissions retain an account/task-scoped browser draft; retries are explicit and keep the same ticket ID. There is no automatic background submission.
-4. Use the private **QA** toolbar button or **QA inbox** inside the panel to inspect stored reports. A report links back to its conversation, preserves only the consented excerpts, accepts private replies and supports manual lifecycle updates: submitted → triaged → proposed fix → Codex PR → QA checked → resolved. A Codex PR status requires a valid `FullDrum/momentum` PR URL. Status does not imply an automatic test or review.
-5. Expand **Public GitHub handoff — fixed text only** to review the public payload, then optionally open its GitHub draft. GitHub requires a separate explicit submission. The handoff contains only the opaque ticket ID, predefined category summary and server-generated build ID. It never interpolates observations, task IDs/names, excerpts, private URLs or replies.
+- Each task conversation has **Report to QA**, with the adjacent disclosure **Whole task chat → private QA**. That deliberate click is consent to save the selected task's complete stored chat privately. There is no report form, preview, checkbox selection or second Send/confirmation.
+- A successful write shows an inline ticket ID, message count and **Private QA inbox** link. Opening the inbox is optional and does not submit another report. Normal messages and page reloads never submit QA automatically.
+- The server captures all turns from that task, including older turns under collapsed History and earlier task notes displayed in the conversation. The immutable snapshot preserves message IDs, roles, order, complete text, timestamps, assistant status and allowlisted proposal fields, with a snapshot timestamp, stable task ID and server build ID. Old records without message timestamps retain `null`, displayed as timestamp unavailable; no timestamp is invented.
+- Capture uses the authenticated account's server history, not a browser-supplied transcript. Other tasks, unsent composer drafts, raw recordings, attachment fields, environment values and unrelated app state are excluded. The report is not a task or an AI message.
+- Credential patterns and the configured provider key are redacted server-side. Other private text, URLs and emails remain intact so the decision context is complete. Nothing is silently shortened. More than **1,000 messages** or **200,000 UTF-8 bytes** returns a clear 413 error with no report written. The existing account storage limit also applies.
 
-## Security and storage
+## Retries and persistence
 
-- Existing Sites authentication derives the account from platform-injected identity. All feedback reads/writes use that account's isolated staging D1 record. A ticket ID is not authorization. No cross-account lookup or reviewer impersonation is provided.
-- Server validation checks the linked task and selected message IDs against that account and conversation. Excerpts are limited to two × 600 characters; observations/replies to 2,000 characters. Reports contain allowlisted fields, not serialized app state, raw audio, full histories, request headers or environment values.
-- Common API key, bearer/JWT token, credential assignment, email and URL patterns are redacted before the private preview and on write. This is best-effort protection for arbitrary user input; the user must remove other sensitive content before confirming. Public privacy does not depend on this redactor: the public body is built from preset strings and opaque metadata only.
-- Mutations require same-origin authenticated JSON requests and explicit approval. Feedback writes use compare-and-swap on the account record. Concurrent/lost-response create retries produce one report; changed content under the same ID conflicts. Replies have durable request IDs; status updates check the report revision. Server timestamps and build IDs cannot be supplied by users.
-- Reports survive reload, rename, moves and deletion of the source task. If the task is gone, the inbox retains only the previously consented excerpt and explains why the conversation link is unavailable. Task structure and conversation messages are not modified by QA submission.
-- Drafts are stored in this browser under account/task keys, never auto-sent. The inbox currently supports 100 reports/account and 50 replies/report, subject to the existing 2 MB account storage limit. No automatic deletion/retention worker is introduced.
-- Build IDs are deterministic hashes of the bundled application/worker inputs. A stale-build draft must be previewed again before a new submission; an already-saved report remains safely retryable after deployment changes.
+The browser stores only an account/task-scoped request ID, a history digest and completion metadata—not another transcript copy. The pending ID is saved before sending. Repeated taps are guarded in flight; repeated reporting of the unchanged loaded conversation reuses the completed ID. A changed conversation permits a new explicit report. Server retries return the original frozen snapshot, even after the chat changes, the source task is deleted or another build is deployed.
 
-## Reviewer integration limits
+An offline/failed click shows **QA not confirmed** and asks for an explicit retry. Reload/reconnect never auto-retries. If a report did not reach the server, the retry captures the then-current stored conversation. If the response was lost after a successful write, retry returns the original ticket and snapshot. No success claim is made before the server confirms persistence.
 
-The built-in OpenAI assistant and an ordinary ChatGPT conversation are separate sessions. Neither receives QA push messages. Connected GitHub access cannot inspect arbitrary private staging feedback. The private inbox/API is available to the signed-in owning account; the MVP has no separate reviewer role, shared triage account or automatic status synchronization with GitHub. Sharing the Site with another account does not grant access to this account's reports.
+The private inbox retains reports after task rename/move/deletion, links back to the conversation where available, accepts private replies and supports manual submitted → triaged → proposed fix → Codex PR → QA checked → resolved status. A Codex PR status requires a valid FullDrum/momentum PR URL. Status is manual, not evidence of automatic review. Earlier excerpt-based reports and their existing API remain readable/compatible; old reports are not silently expanded into full-history snapshots.
 
-An authorized owner can review the private context, open the fixed-text public draft and reference its opaque ID in a Codex PR. Detailed private review by ChatGPT requires an explicit authorized connector or approved automation that returns only consented QA fields. That connector, scheduled checks, automatic GitHub issue creation and two-way status sync are deferred. No credential/session workaround is used. Screenshots are not required for reporting; the repository review screenshot uses synthetic test data only.
+## Privacy boundary and reviewer limits
+
+Sites authentication derives the account from platform-injected identity. Every read/write is scoped to that account; ticket IDs do not grant access. Writes require same-origin authenticated JSON and explicit consent. Atomic compare-and-swap prevents partial reports and duplicate writes.
+
+The public GitHub handoff remains separate, fixed text: **opaque ticket ID + preset category + build ID only**. It never interpolates the snapshot, task ID/name, observation, excerpt or private reply. Opening the public draft does not submit it. The app has no GitHub credential and does not automatically post GitHub issues.
+
+The built-in OpenAI assistant and ordinary ChatGPT are separate sessions. No automatic/private reviewer connection, notification, scheduled polling or GitHub status synchronization exists. GitHub access alone cannot resolve a private ticket. Authorized review uses the owning account's signed-in inbox, or a separately approved connector/automation that is still deferred. Sharing the Site with another account does not grant access to the owner's reports. Concise **QA privacy help** is available in the inbox.
 
 ## Validation
 
-- `npm test`: all 16 test files pass locally, including eight new SQLite/HTTP QA cases: explicit consent, preview without writes, field allowlisting/redaction, public-payload privacy, auth/account and conversation isolation, concurrent/lost-response deduplication, failed writes, build/size limits, replies and manual lifecycle.
-- `npm run test:staging-browser`: desktop and Pixel 7 emulation with built Worker, disposable SQLite, mocked provider/audio. Includes report opt-in preview, offline reload/retry, lost response/repeated taps, inbox persistence/status/replies, conversation link, second-account isolation and keyboard-open mobile layout. Existing task/date/voice/outliner regressions remain covered. No unexpected external requests or page errors.
-- `npm run test:browser`: existing application shell, cache/offline and sandbox regressions pass.
-- `git diff --check`: pass.
-- Physical Android/IME, signed-in live Site API and live OpenAI provider behavior remain manual checks. Automated tests do not post public GitHub issues or use private staging conversations.
+- `npm test`: all 16 test files pass, including 13 SQLite/HTTP QA cases. New cases verify complete multi-turn history, legacy/older turns, order/roles/timestamps, long untruncated messages, credential-only redaction, snapshot accuracy, size failures, consent/auth/isolation, frozen lost-response/concurrent retries and public-payload privacy.
+- `npm run test:staging-browser`: desktop and Pixel 7 emulation with built Worker/disposable SQLite/mock provider/audio. Verifies one-click reporting with no modal/form/extra consent, older collapsed History, snapshot readback, repeated taps, new-turn reporting, offline reload/retry, saved-response loss, inbox status/replies/linkage/account isolation and keyboard-open layout. Existing task/date/voice/outliner regressions remain covered. No unexpected external requests or page errors.
+- `npm run test:browser` and `git diff --check`: pass.
+- Physical Android/IME, signed-in live-Site API and live-provider checks remain manual. The tests and screenshot use synthetic fixtures only; no actual private conversation is published.
 
-## Acceptance demo
-
-Open a task chat and type “AI misunderstood hierarchy”. Tap Report / QA, edit the observation, optionally select one short excerpt, preview, then Send to QA. Check the tracking ID in the private inbox, refresh, add a private reply and set `triaged`. Expand the public handoff and verify it contains only the opaque ticket/category/build before opening GitHub. Use the signed-in inbox to inspect private context; do not paste it into the public issue.
-
-Staging application build ID: `qa-af57b2a9f85e`. [Mobile QA screenshot — synthetic data only](screenshots/private-qa-mobile.png). The published Site URL is https://momentum-next-staging-nikita.workspace-755223.chatgpt.site; repository-generated Cloudflare previews are not the isolated QA backend.
+Application build: `qa-0e0153717363`. [One-click mobile screenshot — synthetic data only](screenshots/one-click-qa-mobile.png). Staging URL: https://momentum-next-staging-nikita.workspace-755223.chatgpt.site. Repository-generated Cloudflare previews are not this isolated backend.

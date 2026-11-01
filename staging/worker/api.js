@@ -133,7 +133,7 @@ export async function handleApi(request,env,relations,buildId='development'){
   let body;try{body=JSON.parse(raw);}catch(_){fail(400,'Invalid JSON');}
   if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'Invalid request');
   const repo=new StagingRepository(env.DB);
-  if(url.pathname.startsWith('/api/feedback/'))return json(await writeFeedback(repo,owner,url.pathname.slice('/api/feedback/'.length),body,buildId));
+  if(url.pathname.startsWith('/api/feedback/'))return json(await writeFeedback(repo,owner,url.pathname.slice('/api/feedback/'.length),body,buildId,{secrets:[env.OPENAI_API_KEY]}));
   if(url.pathname==='/api/rpc')return json(await nativeRpc(repo,owner,body,relations));
   if(url.pathname==='/api/message'){
    await saveMessage(repo,owner,body);
