@@ -53,3 +53,7 @@ Version 4 uses a compact composer and explicit ancestor context. Blank-task titl
 ## Dated task creation and voice actions — 1 November 2026
 
 Every persisted task must have a work-list date, default Today, independently of its project or parent. No undated backlog items. An idea can remain conversation text until an explicit task proposal is approved. Independent actions remain independent tasks. Staging now supports atomic reviewed AI task batches with durable retry protection, blank-node history retention and verified list refresh. Recording Stop leaves an editable transcript; recording Send transcribes and submits once. See `DATED_TASKS_VOICE_REPORT.md` for tests and manual live-provider/Android limits. This supersedes earlier backlog wording that could imply an undated task pool.
+
+## In-app private QA — Issue #10 MVP
+
+Staging has an explicit Report / QA workflow, editable opt-in excerpt preview, account-scoped persistent inbox, deduplicated retries, private replies, manual lifecycle and fixed-text public GitHub drafts. No automatic ChatGPT review, public conversation export or background submissions. See `PRIVATE_QA_FEEDBACK.md` for the security boundary, acceptance demo and connector/automation limitations.

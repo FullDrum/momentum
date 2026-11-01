@@ -1,3 +1,4 @@
+import {readFeedback,writeFeedback} from './feedback.js';
 import {taskDate,stagingToday,dateAllTasks} from './task-dates.js';
 import {creationPreview,applyCreation} from './task-creation.js';
 import {transcribeAudio} from './transcription.js';
@@ -104,13 +105,16 @@ export async function execute(repo,owner,path,body,relations){
  }
  fail(409,'Another device updated your staging data. Refresh and retry.');
 }
-export async function handleApi(request,env,relations){
+export async function handleApi(request,env,relations,buildId='development'){
  const url=new URL(request.url);
- if(url.pathname==='/api/health')return json({ok:true,environment:'isolated-staging',storageConfigured:!!env.DB});
+ if(url.pathname==='/api/health')return json({ok:true,environment:'isolated-staging',storageConfigured:!!env.DB,buildId});
  const owner=request.headers.get('oai-authenticated-user-id');
  if(!owner)return json({error:'Sign in to access your staging tasks.'},401);
  if(!env.DB)return json({error:'Staging database binding is unavailable.'},503);
  try{
+  if(url.pathname==='/api/feedback'){
+   if(request.method==='GET')return json(await readFeedback(new StagingRepository(env.DB),owner,url.searchParams.get('id'),buildId));
+  }
   if(url.pathname==='/api/conversation'){
    if(request.method!=='GET')fail(405,'Method not allowed');
    return json(conversationState(await new StagingRepository(env.DB).read(owner),id(url.searchParams.get('taskId')),env));
@@ -129,6 +133,7 @@ export async function handleApi(request,env,relations){
   let body;try{body=JSON.parse(raw);}catch(_){fail(400,'Invalid JSON');}
   if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'Invalid request');
   const repo=new StagingRepository(env.DB);
+  if(url.pathname.startsWith('/api/feedback/'))return json(await writeFeedback(repo,owner,url.pathname.slice('/api/feedback/'.length),body,buildId));
   if(url.pathname==='/api/rpc')return json(await nativeRpc(repo,owner,body,relations));
   if(url.pathname==='/api/message'){
    await saveMessage(repo,owner,body);

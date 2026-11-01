@@ -108,3 +108,9 @@ Task creation is now a persisted assistant-proposal batch: preview exact titles,
 Recording Stop transcribes to the editable draft only. Recording Send finishes, transcribes and submits once; both controls stay visible during recording. Timed stops and recovered transcription retries remain review-only. OpenAI automatic-language transcription is preserved.
 
 See `docs/DATED_TASKS_VOICE_REPORT.md` in the FullDrum development repository for acceptance tests and physical Android/live-provider checks still needed.
+
+## Private QA feedback — Issue #10 MVP
+
+The staging-only QA module provides Report / QA in each contextual conversation and a private QA inbox. Excerpts are opt-in and editable; the exact redacted private payload must be previewed and explicitly sent. Account-scoped D1 persists tracking IDs, replies and manual statuses. Offline/lost-response retries are explicit and deduplicated. No feedback is sent to the OpenAI provider or automatically posted to GitHub.
+
+Public handoffs are fixed-text GitHub drafts containing only an opaque ticket ID, preset category and build ID. Observations, task IDs/names and excerpts are excluded regardless of user input. Opening a draft requires a separate action and does not submit it. Connected GitHub access alone cannot read private reports; owner-authenticated private review or a separately approved connector is required. No reviewer automation or role sharing is introduced. See `docs/PRIVATE_QA_FEEDBACK.md` in the development repository for the full workflow and limitations.
