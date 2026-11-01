@@ -30,3 +30,11 @@ test('late transcription callbacks after close cannot append text to another pan
 test('empty provider result fails without changing typed text',async()=>{
  const h=harness({transcribe:async()=>({text:' '})});await h.controller.start();h.controller.stop();await tick();assert.equal(h.controller.state(),'failed');assert.deepEqual(h.texts,[]);h.controller.dispose();
 });
+test('Stop reviews by default; explicit Send transcribes once with send intent',async()=>{
+ const intents=[];const review=harness({onTranscript:(text,intent)=>intents.push(intent)});await review.controller.start();review.controller.stop();await tick();assert.deepEqual(intents,['review']);
+ const send=harness({onTranscript:(text,intent)=>intents.push(intent)});await send.controller.start();send.controller.stop(true);send.controller.stop(true);send.controller.stop();await tick();assert.equal(send.calls.length,1);assert.deepEqual(intents,['review','send']);
+});
+test('automatic duration stop and retry after failed Send never auto-send a transcript',async()=>{
+ let timeout;const intents=[];const timed=harness({setTimeout:fn=>(timeout=fn,1),onTranscript:(text,intent)=>intents.push(intent)});await timed.controller.start();timeout();await tick();assert.deepEqual(intents,['review']);
+ let attempts=0;const failed=harness({transcribe:async()=>{if(++attempts===1)throw Error('offline');return {text:'Recovery'};},onTranscript:(text,intent)=>intents.push(intent)});await failed.controller.start();failed.controller.stop(true);await tick();assert.equal(failed.controller.state(),'failed');await failed.controller.retry();assert.deepEqual(intents,['review','review']);
+});

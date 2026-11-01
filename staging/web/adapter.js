@@ -2,6 +2,7 @@
 (function(){
  'use strict';
  var expectedTree=null,accountId=null,pendingBatch=null;
+ function today(){return localDateTime().slice(0,10);}
  async function api(path,body){
   var controller=new AbortController(),timeout=setTimeout(function(){controller.abort();},30000);
   try{
@@ -25,10 +26,10 @@
    }
    if(fn==='batchOps'){
     var signature=JSON.stringify(arg);
-    if(!pendingBatch||pendingBatch.signature!==signature)pendingBatch={signature:signature,requestId:crypto.randomUUID(),expectedTree:expectedTree};
+    if(!pendingBatch||pendingBatch.signature!==signature)pendingBatch={signature:signature,requestId:crypto.randomUUID(),expectedTree:expectedTree,today:today()};
     localStorage.setItem(batchKey(),JSON.stringify(pendingBatch));
     var result;
-    try{result=token(await api('rpc',{fn:fn,arg:arg,requestId:pendingBatch.requestId,expectedTree:pendingBatch.expectedTree}));}
+    try{result=token(await api('rpc',{fn:fn,arg:arg,today:pendingBatch.today,requestId:pendingBatch.requestId,expectedTree:pendingBatch.expectedTree}));}
     catch(error){if(error.status===409){pendingBatch=null;localStorage.removeItem(batchKey());}throw error;}
     pendingBatch=null;localStorage.removeItem(batchKey());return result;
    }
@@ -49,9 +50,10 @@
    var response=await fetch('/api/transcribe?taskId='+encodeURIComponent(taskId),{method:'POST',credentials:'same-origin',headers:{'content-type':blob.type},body:blob,signal:signal});
    var data=await response.json();if(!response.ok)throw new Error(data.error||'Transcription failed');return data;
   },
-  send:async function(taskId,text,requestId){await window.MomentumStaging.sync();return api('message',{taskId:taskId,text:text,requestId:requestId});},
+  send:async function(taskId,text,requestId){await window.MomentumStaging.sync();return api('message',{taskId:taskId,text:text,requestId:requestId,today:today()});},
   retry:async function(taskId,messageId){return api('reply',{taskId:taskId,messageId:messageId});},
-  preview:async function(taskId,kind,targetId,title){await window.MomentumStaging.sync();return api('preview',{taskId:taskId,kind:kind,targetId:targetId,title:title});},
-  apply:async function(proposal,requestId){await window.MomentumStaging.sync();var data=await api('apply',{proposal:proposal,requestId:requestId,approved:true});if(proposal.taskId&&!queueState.saves[proposal.taskId])delete nodeTouched[proposal.taskId];await window.MomentumStaging.refresh();return data;}
+  preview:async function(taskId,kind,targetId,title,date,sourceMessageId){await window.MomentumStaging.sync();return api('preview',{taskId:taskId,kind:kind,targetId:targetId,title:title,date:date||null,sourceMessageId:sourceMessageId,today:today()});},
+  apply:async function(proposal,requestId){await window.MomentumStaging.sync();var data=await api('apply',{proposal:proposal,requestId:requestId,approved:true});if(proposal.taskId&&!queueState.saves[proposal.taskId])delete nodeTouched[proposal.taskId];(data.created||[]).forEach(function(t){delete nodeTouched[t.id];});await window.MomentumStaging.refresh();
+   (data.created||[]).forEach(function(t){var saved=nodes.find(function(n){return n.id===t.id;});if(!saved||saved.name!==t.name||saved.date!==t.date||saved.parentId!==t.parentId)throw new Error('Tasks were saved, but list verification failed. Refresh and retry confirmation.');});return data;}
  };
 })();

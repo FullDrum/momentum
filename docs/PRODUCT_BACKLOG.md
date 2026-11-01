@@ -49,3 +49,7 @@ Staging retains untitled task IDs through blur, queue/reload and conversation re
 ## Compact chat and reviewed titles — 1 November 2026
 
 Version 4 uses a compact composer and explicit ancestor context. Blank-task title suggestions require confidence/evidence checks and explicit approval; matching subtasks are rejected. OpenAI Developers remains uninstalled and the staging API key is absent, so live AI/voice connection is incomplete. See `AI_VOICE_COMPACT_STATUS.md` for the configuration and verification status.
+
+## Dated task creation and voice actions — 1 November 2026
+
+Every persisted task must have a work-list date, default Today, independently of its project or parent. No undated backlog items. An idea can remain conversation text until an explicit task proposal is approved. Independent actions remain independent tasks. Staging now supports atomic reviewed AI task batches with durable retry protection, blank-node history retention and verified list refresh. Recording Stop leaves an editable transcript; recording Send transcribes and submits once. See `DATED_TASKS_VOICE_REPORT.md` for tests and manual live-provider/Android limits. This supersedes earlier backlog wording that could imply an undated task pool.

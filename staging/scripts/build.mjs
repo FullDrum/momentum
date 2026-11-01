@@ -8,6 +8,11 @@ html=html.replace(/<script src="https:\/\/accounts\.google\.com[^>]*><\/script>/
  .replace('<title>Momentum – Task Manager</title>','<title>Momentum – Staging Outliner</title>')
  .replace('<div class="toolbar">','<div class="toolbar"><span class="staging-badge">PRIVATE STAGING</span>');
 let app=read('original/app.js').replace(/var APPS_SCRIPT_URL = '[^']*';/,"var APPS_SCRIPT_URL = '';" ).replace(/var GOOGLE_CLIENT_ID = '[^']*';/,"var GOOGLE_CLIENT_ID = '';" );
+app=app.replace('function scheduleSave(node) { queueSave(node); }', 'function scheduleSave(node) { if (!node.isSection && !node.date) node.date = localDateTime(); queueSave(node); }');
+// Staging work-list dates do not inherit from hierarchy or change on indentation.
+app=app.replace('date: parentNode.date || null,','date: localDateTime(),')
+ .replace('date: cur.date || null,','date: localDateTime(),')
+ .replace("if (activeTab === 'today' || activeTab === 'all') cur.date = target.date;",'/* Preserve the task work-list date when indenting. */');
 if(app.includes('script.google.com')||app.includes('apps.googleusercontent.com')||html.includes('accounts.google.com'))throw new Error('Production integration leaked into staging build');
 const assets={
  '/':{type:'text/html; charset=utf-8',content:html},
@@ -23,7 +28,7 @@ for(const file of ['icon-192.png','icon-512.png'])assets['/'+file]={type:'image/
 const security={'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'same-origin','permissions-policy':'microphone=(self), camera=(), geolocation=()',
  'content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"};
 const bundle=file=>read(file).replace(/^import .*;\n/gm,'');
-const worker=read('shared/task-relations.js')+'\n'+bundle('worker/api.js')+'\n'+bundle('worker/native-rpc.js')+'\n'+bundle('worker/conversations.js')+'\n'+bundle('worker/transcription.js')+'\nconst assets='+JSON.stringify(assets)+';\nconst security='+JSON.stringify(security)+`;\nexport default {async fetch(request,env){
+const worker=read('shared/task-relations.js')+'\n'+bundle('worker/task-dates.js')+'\n'+bundle('worker/task-creation.js')+'\n'+bundle('worker/api.js')+'\n'+bundle('worker/native-rpc.js')+'\n'+bundle('worker/conversations.js')+'\n'+bundle('worker/transcription.js')+'\nconst assets='+JSON.stringify(assets)+';\nconst security='+JSON.stringify(security)+`;\nexport default {async fetch(request,env){
  const url=new URL(request.url);let response;
  if(url.pathname.startsWith('/api/'))response=await handleApi(request,env,globalThis.MomentumTaskRelations);
  else if(assets[url.pathname]&&['GET','HEAD'].includes(request.method)){const asset=assets[url.pathname];const content=asset.binary?Uint8Array.from(atob(asset.content),c=>c.charCodeAt(0)):asset.content;response=new Response(request.method==='HEAD'?null:content,{headers:{'content-type':asset.type}});}
