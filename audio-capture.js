@@ -16,8 +16,8 @@
     var result=await options.transcribe(session.blob,session.id,session.abort.signal);
     if(disposed||current!==session)return;
     if(!result||typeof result.text!=='string'||!result.text.trim())throw new Error('No speech was detected. Type your message or record again.');
-    session.applied=true;options.onTranscript(result.text.trim());session.blob=null;session.chunks=[];current=null;change('idle');status('Transcribed.');
-   }catch(error){if(disposed||current!==session)return;change('failed');status('Transcription unavailable: '+error.message+' Your typed text is kept. Retry the recording or use text.');}
+    session.applied=true;options.onTranscript(result.text.trim(),session.intent||'review');session.blob=null;session.chunks=[];current=null;change('idle');status('Transcribed.');
+   }catch(error){if(disposed||current!==session)return;session.intent='review';change('failed');status('Transcription unavailable: '+error.message+' Your typed text is kept. Retry the recording or use text.');}
    finally{if(session.uploadTimer)clear(session.uploadTimer);session.uploading=false;}
   }
   async function start(){
@@ -34,11 +34,11 @@
      if(!session.size||session.size>10*1024*1024){cancel();status('Recording was empty or too large. Use a shorter clip or type instead.');return;}
      session.blob=new Blob(session.chunks,{type:rec.mimeType||mime||'audio/webm'});transcribe(session);
     };
-    rec.start();change('recording');status('Recording… Tap Stop.');
+    rec.start();change('recording');status('Recording… Stop to review or Send.');
     session.timer=timer(function(){if(current===session)stop();},60000);
    }catch(error){if(current!==session)return;cancel();status(error.name==='NotAllowedError'?'Microphone permission denied. Allow Microphone in browser site settings, or type instead.':'Microphone unavailable. Your text is kept; type instead or try again.');}
   }
-  function stop(){var session=current;if(!session||!session.rec||session.rec.state==='inactive')return;try{session.rec.stop();release(session);}catch(error){cancel();status('Could not finish recording. Type instead.');}}
+  function stop(send){var session=current;if(!session||!session.rec||session.rec.state==='inactive'||session.stopRequested)return;session.stopRequested=true;session.intent=send===true?'send':'review';change('stopping');try{session.rec.stop();release(session);}catch(error){cancel();status('Could not finish recording. Type instead.');}}
   return {supported:!!(Recorder&&media),start:start,stop:stop,cancel:cancel,retry:function(){if(current&&state==='failed')return transcribe(current);},state:function(){return state;},dispose:function(){cancel();disposed=true;}};
  }
  root.MomentumAudio={createRecorder:createRecorder};

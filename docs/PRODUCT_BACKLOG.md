@@ -49,3 +49,15 @@ Staging retains untitled task IDs through blur, queue/reload and conversation re
 ## Compact chat and reviewed titles — 1 November 2026
 
 Version 4 uses a compact composer and explicit ancestor context. Blank-task title suggestions require confidence/evidence checks and explicit approval; matching subtasks are rejected. OpenAI Developers remains uninstalled and the staging API key is absent, so live AI/voice connection is incomplete. See `AI_VOICE_COMPACT_STATUS.md` for the configuration and verification status.
+
+## Dated task creation and voice actions — 1 November 2026
+
+Every persisted task must have a work-list date, default Today, independently of its project or parent. No undated backlog items. An idea can remain conversation text until an explicit task proposal is approved. Independent actions remain independent tasks. Staging now supports atomic reviewed AI task batches with durable retry protection, blank-node history retention and verified list refresh. Recording Stop leaves an editable transcript; recording Send transcribes and submits once. See `DATED_TASKS_VOICE_REPORT.md` for tests and manual live-provider/Android limits. This supersedes earlier backlog wording that could imply an undated task pool.
+
+## In-app private QA — Issue #10 MVP
+
+Staging has an explicit Report / QA workflow, editable opt-in excerpt preview, account-scoped persistent inbox, deduplicated retries, private replies, manual lifecycle and fixed-text public GitHub drafts. No automatic ChatGPT review, public conversation export or background submissions. See `PRIVATE_QA_FEEDBACK.md` for the security boundary, acceptance demo and connector/automation limitations.
+
+## PR #11 acceptance correction — whole-chat one-click QA
+
+The user rejected the excerpt form. Report to QA now directly submits a private snapshot of the full selected task conversation, including older History turns, with inline confirmation and no form/checkbox/preview step. Explicit click consent, account isolation, frozen retry snapshots and the opaque-only public GitHub boundary remain enforced. Histories over 1,000 messages / 200 KB fail clearly without truncation. The private-reviewer connector remains deferred; see `PRIVATE_QA_FEEDBACK.md`.

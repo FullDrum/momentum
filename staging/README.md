@@ -98,3 +98,23 @@ The server now builds explicit root-to-parent ancestor context independently of 
 For an empty task, the AI schema supports a short title suggestion with high confidence. The server rejects title suggestions for already-titled tasks, low-confidence output, insufficient user evidence, empty/generic placeholders or overlong titles. A title stays a suggestion until Preview and explicit Approve. Approval changes only the title; the ID, parent and conversation remain. If there is insufficient information, the stored title remains empty and the UI retains New task. Matching child titles are rejected in reviewed subtask creation to avoid redundant tasks. Manual outliner editing remains unchanged.
 
 **Real AI/voice connection remains incomplete:** the plugin directory reports OpenAI Developers as not installed, no OpenAI skill/tools are available in this session, and the Site has no runtime `OPENAI_API_KEY`. Install OpenAI Developers to enable its supported key workflow, then configure the isolated Site secret and publish the environment revision. Do not paste keys into chat or browser code. Existing text/history functionality is independent of that configuration. Automated provider responses are mocked and do not demonstrate a live OpenAI connection.
+
+## Dated tasks and voice Stop/Send — 1 November 2026
+
+Current staging has a configured server-side `OPENAI_API_KEY` (presence only was checked); earlier missing-key statements above describe historical milestones. The environment revision was applied before this milestone. No key was created or changed here.
+
+Task creation is now a persisted assistant-proposal batch: preview exact titles, parents and work-list dates, then explicitly approve. The server writes atomically, rejects stale/tampered plans, returns persisted task IDs and prevents duplicate applications. The client refreshes and verifies those records before reporting success. Empty conversation nodes can supply the first stable task ID. Manual/AI/converted/parent/subtasks default to Today; dates do not follow hierarchy. Existing undated staging tasks are dated on load. Browser calendar day is used, with Pacific/Auckland fallback; a work-list date is not a deadline.
+
+Recording Stop transcribes to the editable draft only. Recording Send finishes, transcribes and submits once; both controls stay visible during recording. Timed stops and recovered transcription retries remain review-only. OpenAI automatic-language transcription is preserved.
+
+See `docs/DATED_TASKS_VOICE_REPORT.md` in the FullDrum development repository for acceptance tests and physical Android/live-provider checks still needed.
+
+## Private QA feedback — Issue #10 MVP
+
+The staging-only QA module provides Report / QA in each contextual conversation and a private QA inbox. Excerpts are opt-in and editable; the exact redacted private payload must be previewed and explicitly sent. Account-scoped D1 persists tracking IDs, replies and manual statuses. Offline/lost-response retries are explicit and deduplicated. No feedback is sent to the OpenAI provider or automatically posted to GitHub.
+
+Public handoffs are fixed-text GitHub drafts containing only an opaque ticket ID, preset category and build ID. Observations, task IDs/names and excerpts are excluded regardless of user input. Opening a draft requires a separate action and does not submit it. Connected GitHub access alone cannot read private reports; owner-authenticated private review or a separately approved connector is required. No reviewer automation or role sharing is introduced. See `docs/PRIVATE_QA_FEEDBACK.md` in the development repository for the full workflow and limitations.
+
+## One-click QA acceptance update (supersedes the excerpt form)
+
+Report to QA now immediately captures the full selected task's stored conversation privately. The click is explicit consent; no form, mandatory preview, checkboxes or second Send step remain. Inline feedback shows the confirmed ticket and an optional private inbox link. The server preserves complete ordered messages, roles, timestamps and older History/legacy notes, with credential redaction and explicit 1,000-message / 200 KB errors instead of truncation. Frozen snapshots and durable request IDs handle retries; reconnect/reload never auto-submit. Public GitHub handoffs still contain only an opaque ticket/category/build. No direct ChatGPT/private reviewer connection is claimed. Earlier excerpt records remain compatible.

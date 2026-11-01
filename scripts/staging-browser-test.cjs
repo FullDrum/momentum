@@ -4,10 +4,18 @@ const assert=require('node:assert/strict');const http=require('node:http');const
  const db=new DatabaseSync(':memory:');db.exec(fs.readFileSync('staging/drizzle/0000_staging.sql','utf8'));
  const env={OPENAI_API_KEY:'test-only',DB:{prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async run(){return {meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}};}}};
  const source=fs.readFileSync('staging/dist/server/index.js','utf8');const worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
- let transcriptionRequests=0;const originalFetch=global.fetch;global.fetch=async(url,options)=>{
+ let transcriptionRequests=0,aiRequests=0;const originalFetch=global.fetch;global.fetch=async(url,options)=>{
   if(url==='https://api.openai.com/v1/audio/transcriptions'){transcriptionRequests++;assert.equal(options.body.has('language'),false);return Response.json({text:'Привет, freight tomorrow.'});}
   if(url!=='https://api.openai.com/v1/responses')throw Error('Unexpected external server request');
-  const payload=JSON.parse(options.body);if(payload.input.some(m=>m.content==='Repair blocked transfer pump'))return Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'The goal is clear.',proposals:[{kind:'title',targetId:null,title:'Repair transfer pump',reason:'A concrete action from the conversation.',confidence:'high'}]})}]}]});
+  aiRequests++;const payload=JSON.parse(options.body);
+  function result(reply,proposals=[]){return Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply,proposals})}]}]});}
+  const last=payload.input.at(-1).content;
+  if(last.includes('Посчитать бонус Артёма'))return result('Предлагаю три независимые задачи для подтверждения.',['Посчитать бонус Артёма','Сделать проплаты','Сравнить варианты доставки декантера из Канады'].map(title=>({kind:'create_task',targetId:null,date:null,title,reason:'Независимое действие',confidence:'high'})));
+  if(last==='Обсудим идею без создания задач')return result('Давайте сначала обсудим идею.');
+  if(last==='Создай задачу изучить импорт')return result('Предлагаю задачу на сегодня.',[{kind:'create_task',targetId:null,date:null,title:'Изучить импорт',reason:'Пользователь подтвердил намерение',confidence:'high'}]);
+  if(last==='Запланируй сравнить доставку на 10 ноября 2030')return result('Предлагаю задачу на указанную дату.',[{kind:'create_task',targetId:null,date:'2030-11-10',title:'Сравнить доставку позже',reason:'Явно указанная дата',confidence:'high'}]);
+  if(last==='Вынеси вложенную идею в отдельную задачу')return result('Предлагаю отдельную задачу.',[{kind:'create_task',targetId:null,date:null,title:'Независимая вложенная идея',reason:'Явный запрос на самостоятельную задачу',confidence:'high'}]);
+  if(last==='Voice send Привет, freight tomorrow.')return result('Voice message received for review.');if(payload.input.some(m=>m.content==='Repair blocked transfer pump'))return Response.json({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'The goal is clear.',proposals:[{kind:'title',targetId:null,title:'Repair transfer pump',reason:'A concrete action from the conversation.',confidence:'high'}]})}]}]});
   return new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({reply:'Confirm the documents before booking freight.',proposals:[{kind:'subtask',targetId:null,title:'Obtain bill of lading',reason:'A concrete prerequisite to discuss and approve.'}]})}]}]}));
  };
  const server=http.createServer(async(req,res)=>{
@@ -43,8 +51,13 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   await input.fill('Typed context');await page.getByRole('button',{name:'Record voice message',exact:true}).click();
   assert.equal(await input.inputValue(),'Typed context');await page.getByRole('button',{name:'Stop recording',exact:true}).click();
   await page.waitForFunction(()=>document.getElementById('task-chat-input').value==='Typed context Привет, freight tomorrow.');
-  await page.evaluate(()=>recorders[0].onstop());assert.equal(transcriptionRequests,1);assert.equal(await page.locator('[aria-label="Conversation speech language"]').count(),0);
+  await page.evaluate(()=>recorders[0].onstop());assert.equal(transcriptionRequests,1);assert.equal(aiRequests,0);assert.equal(await page.locator('[aria-label="Conversation speech language"]').count(),0);
   await page.evaluate(()=>{window.denyMic=true;});await page.getByRole('button',{name:'Record voice message',exact:true}).click();await page.getByText(/Microphone permission denied/).waitFor();assert.equal(await input.inputValue(),'Typed context Привет, freight tomorrow.');await page.evaluate(()=>{window.denyMic=false;});
+  // Recording Send finishes/transcribes/submits exactly once; Stop above made no AI request.
+  await input.fill('Voice send');await page.getByRole('button',{name:'Record voice message',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Stop recording',exact:true}).isVisible(),true);assert.equal(await page.getByRole('button',{name:'Send',exact:true}).isEnabled(),true);
+  await page.getByRole('button',{name:'Send',exact:true}).evaluate(b=>{b.click();b.click();});
+  await panel.getByText('Voice message received for review.',{exact:true}).waitFor();assert.equal(aiRequests,1);assert.equal(transcriptionRequests,2);assert.equal(await input.inputValue(),'');
   await input.fill('What prerequisites do we need?');await input.press('Enter');assert.equal(await page.evaluate(()=>nodes.length),taskCount);
   await page.getByRole('button',{name:'Send',exact:true}).click();await panel.getByText('Confirm the documents before booking freight.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>nodes.length),taskCount);assert.equal(await page.locator('.task-chat-proposal').count(),1);
@@ -122,9 +135,74 @@ const assert=require('node:assert/strict');const http=require('node:http');const
   assert.equal(await phone.locator('#mobileFab').evaluate(n=>n.parentElement.classList.contains('toolbar')),true);
   assert.ok(await phone.locator('#mobileNav').evaluate(n=>n.getBoundingClientRect().bottom<=visualViewport.height+visualViewport.offsetTop+1));
   await phone.screenshot({path:'work/connect-compact-mobile.png',fullPage:true});
-  const bob=await browser.newContext({serviceWorkers:'block'});await bob.addCookies([{name:'owner',value:'bob',url:base}]);const bobPage=await bob.newPage();await bobPage.goto(base);await bobPage.getByText('Today is clear',{exact:true}).waitFor();
+  // Three real persistent writes after one reviewed AI batch; no artificial parent.
+  await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.locator('#mobileFab').tap();const batchOrigin=await phone.evaluate(()=>focusId);
+  await phone.locator('[data-task-chat="'+batchOrigin+'"]').tap();await phone.getByLabel('Message about this task').fill('Посчитать бонус Артёма, сделать проплаты и сравнить варианты доставки декантера из Канады.');await phone.getByRole('button',{name:'Send',exact:true}).tap();
+  await phone.getByText('Предлагаю три независимые задачи для подтверждения.',{exact:true}).waitFor();const beforeBatch=await phone.evaluate(()=>nodes.length);
+  await phone.locator('.task-chat-structure > summary').tap();await phone.getByRole('button',{name:'Review 3 proposed tasks',exact:true}).tap();await phone.getByText(/Not applied/).waitFor();assert.equal(await phone.evaluate(()=>nodes.length),beforeBatch);
+  assert.equal(await phone.locator('.task-chat-preview').evaluate(n=>(n.textContent.match(/Root \(independent task\)/g)||[]).length),3);
+  await phone.getByRole('button',{name:'Approve this change',exact:true}).evaluate(b=>{b.click();b.click();});await phone.getByText('Saved and verified 3 dated tasks.',{exact:true}).waitFor();
+  assert.equal(await phone.evaluate(()=>nodes.length),beforeBatch+2);
+  await phone.screenshot({path:'work/dated-tasks-approved-mobile.png'});
+  const createdIds=await phone.evaluate(()=>nodes.filter(n=>['Посчитать бонус Артёма','Сделать проплаты','Сравнить варианты доставки декантера из Канады'].includes(n.name)).map(n=>{if(n.parentId!==null||n.date!==localDateTime().slice(0,10))throw Error('Expected independent Today task');return n.id;}));assert.equal(createdIds.length,3);assert.ok(createdIds.includes(batchOrigin));
+  await phone.reload();await phone.locator('[data-task-chat="'+batchOrigin+'"]').tap();await phone.getByLabel('Message about this task').fill('Обсудим идею без создания задач');await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-log').getByText('Давайте сначала обсудим идею.',{exact:true}).waitFor();assert.equal(await phone.evaluate(()=>nodes.length),beforeBatch+2);
+  await phone.getByLabel('Message about this task').fill('Создай задачу изучить импорт');await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText('Предлагаю задачу на сегодня.',{exact:true}).waitFor();
+  await phone.locator('.task-chat-structure > summary').tap();await phone.getByRole('button',{name:'Review 1 proposed tasks',exact:true}).tap();await phone.getByText(/Not applied/).waitFor();await phone.getByRole('button',{name:'Approve this change',exact:true}).tap();await phone.getByText('Saved and verified 1 dated tasks.',{exact:true}).waitFor();
+  assert.equal(await phone.evaluate(()=>nodes.filter(n=>n.name==='Изучить импорт'&&n.date.slice(0,10)===localDateTime().slice(0,10)).length),1);
+  await phone.getByLabel('Message about this task').fill('Запланируй сравнить доставку на 10 ноября 2030');await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.getByText('Предлагаю задачу на указанную дату.',{exact:true}).waitFor();
+  await phone.getByRole('button',{name:'Review 1 proposed tasks',exact:true}).tap();await phone.getByText(/Not applied/).waitFor();assert.ok((await phone.locator('.task-chat-preview').textContent()).includes('2030-11-10'));
+  await phone.getByRole('button',{name:'Approve this change',exact:true}).tap();await phone.getByText('Saved and verified 1 dated tasks.',{exact:true}).waitFor();assert.equal(await phone.evaluate(()=>nodes.filter(n=>n.name==='Сравнить доставку позже'&&n.date==='2030-11-10').length),1);
+  await phone.reload();await phone.locator('[data-task-chat="'+batchOrigin+'"]').waitFor();assert.equal(await phone.locator('.node-text').filter({hasText:'Сравнить доставку позже'}).count(),0);
+  // Manual sibling creation from a future-dated task defaults to Today, not the sibling/parent date.
+  await page.reload();await page.locator('[data-task-chat="'+batchOrigin+'"]').waitFor();await page.evaluate(()=>{activeTab='all';render();});
+  const futureId=await page.evaluate(()=>nodes.find(n=>n.name==='Сравнить доставку позже').id);await page.locator('#disp_'+futureId).click();await page.locator('#inp_'+futureId).press('Shift+Enter');
+  const manualId=await page.evaluate(()=>focusId);assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).date.slice(0,10)===localDateTime().slice(0,10),manualId),true);
+  await page.locator('#inp_'+manualId).fill('Manual dated sibling');await page.locator('#inp_'+manualId).press('Tab');assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).date.slice(0,10)===localDateTime().slice(0,10),manualId),true);await page.evaluate(()=>flushNow(10000));
+  // Date-preserving partial batch plus visibly reviewed move of a nested blank conversation.
+  await page.evaluate(async id=>{await MomentumStaging.sync();await MomentumStaging.rpc('batchOps',{saves:[{id,name:'Future task title only'}],deletes:[]});await MomentumStaging.refresh();},futureId);
+  assert.equal(await page.evaluate(id=>nodes.find(n=>n.id===id).date,futureId),'2030-11-10');
+  await page.evaluate(async parent=>{const n={id:'nested_review',name:'',parentId:parent,date:localDateTime(),owner:currentUser,retainEmpty:true,conversationStarted:true,order:Date.now()};nodes.push(n);scheduleSave(n);collapsed[parent]=false;activeTab='tree';render();await flushNow(10000);},batchOrigin);
+  await page.locator('[data-task-chat="nested_review"]').click();await page.getByLabel('Message about this task').fill('Вынеси вложенную идею в отдельную задачу');await page.getByRole('button',{name:'Send',exact:true}).click();await page.getByText('Предлагаю отдельную задачу.',{exact:true}).waitFor();
+  await page.locator('.task-chat-structure > summary').click();await page.getByRole('button',{name:'Review 1 proposed tasks',exact:true}).click();await page.getByText(/Not applied/).waitFor();
+  assert.ok((await page.locator('.task-chat-preview').textContent()).includes('Move: “Посчитать бонус Артёма” → Root (independent task)'));
+  assert.equal(await page.evaluate(()=>nodes.find(n=>n.id==='nested_review').parentId),batchOrigin);
+  assert.equal(JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).tasks.find(n=>n.id==='nested_review').parentId,batchOrigin);
+  await page.getByRole('button',{name:'Approve this change',exact:true}).click();await page.getByText('Saved and verified 1 dated tasks.',{exact:true}).waitFor();
+  await page.reload();await page.evaluate(()=>{activeTab='tree';render();});await page.locator('[data-task-chat="nested_review"]').click();await page.getByText('Вынеси вложенную идею в отдельную задачу',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>nodes.find(n=>n.id==='nested_review').parentId),null);await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  const payloads=db.prepare('SELECT payload FROM staging_state').all().map(r=>JSON.parse(r.payload));assert.ok(payloads.flatMap(p=>p.tasks).every(t=>t.isSection||t.date));
+  // One deliberate click privately snapshots the entire task chat, including collapsed older History.
+  const qaProviderCount=aiRequests;
+  await phone.goto(base);await phone.locator('[data-task-chat="'+batchOrigin+'"]').tap();await phone.waitForFunction(()=>document.querySelector('.task-chat-log').children.length>0);
+  const beforeQA=JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload);assert.equal((beforeQA.feedback||[]).length,0);
+  const expectedHistory=beforeQA.messages.filter(m=>m.taskId===batchOrigin).sort((a,b)=>a.at.localeCompare(b.at));assert.ok(expectedHistory.length>2);assert.equal(await phone.locator('.task-chat-history').evaluate(n=>n.open),false);
+  assert.ok((await phone.locator('.qa-inline-status').textContent()).includes('Whole task chat → private QA'));
+  await phone.getByLabel('Message about this task').focus();await phone.evaluate(()=>{visualViewport.keyboardHeight=360;visualViewport.dispatchEvent(new Event('resize'));});
+  await phone.waitForFunction(()=>document.body.classList.contains('keyboard-open'));await phone.getByRole('button',{name:'Report to QA',exact:true}).evaluate(b=>{b.click();b.click();});
+  await phone.getByText(/QA saved · qa_/).waitFor();assert.equal(await phone.locator('.qa-dialog').count(),0);assert.equal(await phone.getByRole('button',{name:'Preview private report'}).count(),0);assert.equal(await phone.getByRole('checkbox',{name:/Include.*excerpt/}).count(),0);
+  let persistedQA=JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).feedback;assert.equal(persistedQA.length,1);const submittedId=persistedQA[0].id;
+  assert.deepEqual(persistedQA[0].snapshot.messages.map(m=>({id:m.id,role:m.role,at:m.at,content:m.content})),expectedHistory.map(({id,role,at,content})=>({id,role,at,content})));
+  await phone.getByRole('button',{name:'Report to QA',exact:true}).tap();await phone.getByText(/QA saved · qa_/).waitFor();assert.equal(JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).feedback.length,1);
+  await phone.screenshot({path:'work/one-click-qa-mobile.png'});
+  await phone.getByRole('button',{name:'Private QA inbox',exact:true}).tap();await phone.getByText('Full task conversation ('+expectedHistory.length+' messages)',{exact:true}).waitFor();assert.ok((await phone.locator('.qa-dialog').textContent()).includes(expectedHistory[0].content));
+  await phone.getByText('Public GitHub handoff — fixed text only',{exact:true}).tap();const publicURL=decodeURIComponent(await phone.getByRole('link',{name:'Open sanitized GitHub draft'}).getAttribute('href'));for(const privateTerm of [batchOrigin,...expectedHistory.map(m=>m.content)])assert.ok(!publicURL.includes(privateTerm));assert.ok(publicURL.includes(submittedId));
+  await phone.getByLabel('QA lifecycle status').selectOption('triaged');await phone.getByRole('button',{name:'Save QA status',exact:true}).tap();await phone.getByText('QA status saved.',{exact:true}).waitFor();
+  await phone.getByLabel('Private QA reply').fill('Private follow-up detail.');await phone.getByRole('button',{name:'Send private reply',exact:true}).tap();await phone.getByText('Private reply saved.',{exact:true}).waitFor();await phone.getByRole('button',{name:'Close QA',exact:true}).tap();
+  // A new turn starts a new explicit report; an offline click is not automatically retried.
+  await phone.getByLabel('Message about this task').fill('Обсудим идею без создания задач');await phone.getByRole('button',{name:'Send',exact:true}).tap();await phone.locator('.task-chat-log').getByText('Давайте сначала обсудим идею.',{exact:true}).waitFor();
+  await mobile.setOffline(true);await phone.getByRole('button',{name:'Report to QA',exact:true}).tap();await phone.getByText(/QA not confirmed/).waitFor();assert.equal(JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).feedback.length,1);
+  await mobile.setOffline(false);await phone.reload();await phone.locator('[data-task-chat="'+batchOrigin+'"]').tap();await phone.waitForFunction(()=>document.querySelector('.task-chat-log').children.length>0);assert.equal(JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).feedback.length,1);
+  let dropQA=true;await phone.route('**/api/feedback/report',async route=>{if(dropQA){dropQA=false;await route.fetch();return route.abort();}return route.continue();});
+  await phone.getByRole('button',{name:'Report to QA',exact:true}).tap();await phone.getByText(/QA not confirmed/).waitFor();await phone.getByRole('button',{name:'Report to QA',exact:true}).evaluate(b=>{b.click();b.click();});await phone.getByText(/QA saved · qa_/).waitFor();
+  assert.equal(JSON.parse(db.prepare('SELECT payload FROM staging_state WHERE owner=?').get('alice-test').payload).feedback.length,2);await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();await phone.getByRole('button',{name:'QA inbox',exact:true}).tap();
+  await phone.getByRole('button',{name:submittedId+' · triaged · Task conversation',exact:true}).tap();await phone.getByText('Full task conversation ('+expectedHistory.length+' messages)',{exact:true}).waitFor();await phone.getByRole('button',{name:'Open linked conversation',exact:true}).tap();assert.equal(await phone.locator('.task-conversation').evaluate(n=>n.previousElementSibling.dataset.id),batchOrigin);await phone.getByRole('button',{name:'Close conversation',exact:true}).tap();
+  assert.equal(aiRequests,qaProviderCount+1);
+  // Capture the recording controls only after the desktop interaction assertions, so
+  // responsive navigation changes cannot alter their original fixture layout.
+  await page.goto(base);await page.locator('[data-task-chat="'+batchOrigin+'"]').click();await page.getByLabel('Message about this task').fill('Voice message to review');await page.getByRole('button',{name:'Record voice message',exact:true}).click();
+  await page.setViewportSize({width:393,height:750});await page.locator('.task-chat-compose').scrollIntoViewIfNeeded();await page.screenshot({path:'work/voice-recording-stop-send.png'});await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  const bob=await browser.newContext({serviceWorkers:'block'});await bob.addCookies([{name:'owner',value:'bob',url:base}]);const bobPage=await bob.newPage();await bobPage.goto(base);await bobPage.getByText('Today is clear',{exact:true}).waitFor();await bobPage.getByRole('button',{name:'QA inbox',exact:true}).click();await bobPage.getByText('No QA reports submitted.',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
-  console.log('PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; blank-task ID persistence and offline reload; automatic-language final audio transcription; keyboard-open/closed viewport controls; zero external requests/page errors.');
+  console.log('PASS: original outliner boots; Today task creation, Enter, Tab/Shift+Tab, completion/undo/redo/collapse and native sync; inline placement; persistent ID-bound conversation; no chat child nodes; inert AI proposal then reviewed subtask; rename retention; render/draft/focus/Escape recovery; two sessions; Android viewport/navigation/native task creation; offline send recovery; clear missing-AI state; account isolation; blank-task ID persistence and offline reload; automatic-language final audio transcription; keyboard-open/closed viewport controls; Stop review without AI submission; recording Send submits exactly once; atomic three-independent-Today task approval, reload, idea discussion/conversion, explicit future schedule; all persisted tasks dated; partial title update preserves future date; nested blank move preview/approval and stable history; one-click whole-task private QA snapshot, older collapsed History, no form/extra confirmation, offline/lost-response deduplication, inbox status/reply/linkage/account isolation and mobile keyboard layout; zero external requests/page errors.');
   await bob.close();await mobile.close();await context.close();
  }finally{global.fetch=originalFetch;await browser.close();await new Promise(resolve=>server.close(resolve));db.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

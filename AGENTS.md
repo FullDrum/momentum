@@ -1,0 +1,12 @@
+# Momentum Next development and review
+
+- Preserve the existing Momentum outliner as the product foundation.
+- Implement Momentum Next work on an isolated feature branch. The current integration target is `dev/voice-capture-structure-milestone`; never target the production branch for routine development PRs.
+- After each meaningful implementation, push the feature branch and create or update a GitHub PR in `FullDrum/momentum` against the appropriate development branch.
+- Include a concise behavior summary, tests/results, practical screenshots, the isolated staging URL and any unverified manual checks. Return the PR URL to the user.
+- Read PR review comments, including ChatGPT review comments, as actionable QA feedback. Address applicable issues, push fixes and report what was resolved. Keep fixes within the authorized task and staging boundaries.
+- Never merge or deploy to production without explicit user approval. Do not modify production Google Sheets, Apps Script or Momentum data. The dedicated private Momentum Next staging Site and its separate database are development resources; its hosting repository is separate from FullDrum production.
+- Every persisted task requires a work-list date, default Today unless explicitly scheduled otherwise. Dates and hierarchy are independent. Structural AI changes require visible review and explicit approval. Preserve stable IDs, conversation history and retry idempotency.
+- Recording Stop transcribes to an editable unsent draft. Recording Send finishes/transcribes/submits once. Keep server credentials private and existing automatic-language transcription.
+- In-app QA observations, task identifiers/names, excerpts and replies stay in private staging. Public GitHub handoffs may contain only an opaque QA ticket ID, preset category and build ID. Never copy actual private conversation data into public issues, PR bodies, screenshots or tests. Review screenshots must use clearly identified synthetic fixtures. Private reviewer access and automation require an explicit authorized integration; do not imply that GitHub access unlocks staging records.
+- Report to QA is a one-click submission: the deliberate click consents to a full private snapshot of the selected task conversation only. Do not reintroduce mandatory preview, excerpt checkboxes or a second confirmation. Keep the public GitHub handoff opaque and separate; oversized histories must error without truncation.

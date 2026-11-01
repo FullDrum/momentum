@@ -1,3 +1,4 @@
+import {taskDate,stagingToday} from './task-dates.js';
 import {ApiError,fail,text,id} from './api.js';
 /* Compatibility for the original app's queue contract, isolated to staging. */
 export async function outlineToken(tasks){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(tasks))))).map(b=>b.toString(16).padStart(2,'0')).join('');}
@@ -27,9 +28,12 @@ export async function nativeRpc(repo,owner,body,relations){
   const deletes=new Set(arg.deletes.map(id));state.tasks=state.tasks.filter(t=>!deletes.has(t.id));
   for(const raw of arg.saves){
    if(!raw||typeof raw!=='object')fail(400,'Invalid task');const taskId=id(raw.id);if(deletes.has(taskId))fail(400,'Conflicting task batch');
-   const task={id:taskId,name:text(raw.name??'','task name'),parentId:raw.parentId==null||raw.parentId===''?null:id(raw.parentId),owner,isSection:!!raw.isSection,done:!!raw.done,...(!raw.isSection?{retainEmpty:true}:{}),...(raw.conversationStarted===true?{conversationStarted:true}:{})};
-   for(const key of ['date','completedDate','order','watching','assignedTo','assignedBy','assigneePersonId','sharedWith'])if(raw[key]!==undefined)task[key]=raw[key];
-   if(task.date!=null&&(typeof task.date!=='string'||task.date.length>50))fail(400,'Invalid task date');
+   // Outliner queues normally send full snapshots; partial saves must retain omitted fields.
+   const existing=state.tasks.find(t=>t.id===taskId),values={...existing};
+   for(const [key,value] of Object.entries(raw))if(value!==undefined)values[key]=value;
+   const task={id:taskId,name:text(values.name??'','task name'),parentId:values.parentId==null||values.parentId===''?null:id(values.parentId),owner,isSection:!!values.isSection,done:!!values.done,...(!values.isSection?{retainEmpty:true}:{}),...(values.conversationStarted===true?{conversationStarted:true}:{})};
+   for(const key of ['date','completedDate','order','watching','assignedTo','assignedBy','assigneePersonId','sharedWith'])if(values[key]!==undefined)task[key]=values[key];
+   if(!task.isSection)task.date=taskDate(task.date,stagingToday(body.today));
    if(task.order!=null&&!Number.isFinite(task.order))fail(400,'Invalid task order');
    const at=state.tasks.findIndex(t=>t.id===taskId);if(at<0)state.tasks.push(task);else state.tasks[at]=task;
   }

@@ -17,7 +17,7 @@
   var keyboard=mobile&&editing&&(baseline-height>100||height<500);
   document.body.classList.toggle('keyboard-open',keyboard);
   document.documentElement.style.setProperty('--momentum-viewport-height',height+'px');document.documentElement.style.setProperty('--momentum-viewport-top',top+'px');
-  var bar=document.getElementById('kbBar'),chat=!!(input&&input.closest('.task-conversation'));
+  var bar=document.getElementById('kbBar'),chat=!!(input&&input.closest('.task-conversation,.qa-dialog'));
   if(bar&&mobile)bar.classList.toggle('active',editing&&(keyboard||input.classList.contains('node-input')));
   ['kbIndent','kbOutdent','kbUp','kbDown','kbToday'].forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=chat;});
   var composer=input&&input.closest('.task-chat-compose');
